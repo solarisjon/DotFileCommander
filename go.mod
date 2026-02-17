@@ -1,6 +1,6 @@
 module github.com/solarisjon/dfc
 
-go 1.25
+go 1.24.2
 
 require (
 	github.com/charmbracelet/bubbles v1.0.0
