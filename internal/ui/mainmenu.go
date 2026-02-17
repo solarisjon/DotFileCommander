@@ -30,7 +30,10 @@ func (m Model) updateMainMenu(msg tea.Msg) (tea.Model, tea.Cmd) {
 			case 2: // Manage Entries
 				m.currentView = viewEntryList
 				m.entryCursor = 0
-			case 3: // Settings
+			case 3: // Remote Status
+				m.currentView = viewRemote
+				return m, m.initRemoteView()
+			case 4: // Settings
 				m.currentView = viewSetup
 				m.setupStep = 0
 			}
@@ -79,7 +82,7 @@ func (m Model) viewMainMenu() string {
 	return boxStyle.Render(b.String())
 }
 
-var menuIcons = []string{"⬆", "⬇", "📋", "⚙"}
+var menuIcons = []string{"⬆", "⬇", "📋", "🌐", "⚙"}
 
 func pluralize(n int, singular, plural string) string {
 	if n == 1 {

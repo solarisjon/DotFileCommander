@@ -44,6 +44,10 @@ var (
 	warningStyle = lipgloss.NewStyle().
 		Foreground(warningColor)
 
+	secondaryStyle = lipgloss.NewStyle().
+		Foreground(secondaryColor).
+		Bold(true)
+
 	// Status messages
 	successStyle = lipgloss.NewStyle().
 			Foreground(successColor)

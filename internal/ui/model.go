@@ -21,6 +21,7 @@ const (
 	viewBackup
 	viewRestore
 	viewConfigBrowser
+	viewRemote
 )
 
 // Model is the root bubbletea model.
@@ -77,6 +78,10 @@ type Model struct {
 
 	// Error display
 	errMsg string
+
+	// Remote view
+	remoteEntries []remoteEntry
+	remoteSyncing bool
 
 	quitting bool
 }
@@ -140,7 +145,7 @@ func New(cfg *config.Config) Model {
 	return Model{
 		cfg:         cfg,
 		currentView: startView,
-		menuItems:   []string{"Backup", "Restore", "Manage Entries", "Settings"},
+		menuItems:   []string{"Backup", "Restore", "Manage Entries", "Remote Status", "Settings"},
 		setupInput:  ti,
 		addInput:    addTi,
 		addNameInput: nameTi,
@@ -184,6 +189,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.updateSetup(msg)
 	case repoCloneDoneMsg:
 		return m.updateSetup(msg)
+	case remoteViewSyncMsg:
+		return m.updateRemoteView(msg)
 	}
 
 	switch m.currentView {
@@ -203,6 +210,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.updateRestoreView(msg)
 	case viewConfigBrowser:
 		return m.updateConfigBrowser(msg)
+	case viewRemote:
+		return m.updateRemoteView(msg)
 	}
 
 	return m, nil
@@ -230,6 +239,8 @@ func (m Model) View() string {
 		return m.viewRestoreProgress()
 	case viewConfigBrowser:
 		return m.viewConfigBrowser()
+	case viewRemote:
+		return m.viewRemoteView()
 	}
 
 	return ""
