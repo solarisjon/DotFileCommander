@@ -5,7 +5,9 @@ import (
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/solarisjon/dfc/internal/config"
 	"github.com/solarisjon/dfc/internal/entry"
+	"github.com/solarisjon/dfc/internal/hash"
 	"github.com/solarisjon/dfc/internal/manifest"
 	gsync "github.com/solarisjon/dfc/internal/sync"
 )
@@ -32,15 +34,16 @@ func (m Model) updateRemoteView(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 type remoteEntry struct {
-	name       string
-	path       string
-	tags       string
-	tagsPlain  int
-	repoVer    int
-	localVer   int
-	updatedBy  string
-	isLocal    bool // exists in local config
-	isRemote   bool // exists in remote manifest
+	name          string
+	path          string
+	tags          string
+	tagsPlain     int
+	repoVer       int
+	localVer      int
+	updatedBy     string
+	isLocal       bool // exists in local config
+	isRemote      bool // exists in remote manifest
+	localModified bool // local content differs from last known hash
 }
 
 func (m *Model) initRemoteView() tea.Cmd {
@@ -67,6 +70,7 @@ func (m *Model) loadRemoteData() {
 			name:     e.Name,
 			tags:     e.Tags,
 			localVer: e.LocalVersion,
+			lastHash: e.LastHash,
 			isDir:    e.IsDir,
 		}
 	}
@@ -88,6 +92,13 @@ func (m *Model) loadRemoteData() {
 			if len(local.tags) > 0 {
 				re.tags = strings.Join(local.tags, ", ")
 				re.tagsPlain = len(re.tags)
+			}
+			// Detect local modifications via hash comparison
+			if local.lastHash != "" {
+				currentHash, err := hash.HashEntry(findConfigEntry(m.cfg, path))
+				if err == nil && currentHash != local.lastHash {
+					re.localModified = true
+				}
 			}
 			delete(localByPath, path) // mark as seen
 		} else {
@@ -125,6 +136,7 @@ type localEntryInfo struct {
 	name     string
 	tags     []string
 	localVer int
+	lastHash string
 	isDir    bool
 }
 
@@ -204,6 +216,10 @@ func (m Model) viewRemoteView() string {
 			status = warningStyle.Render("⚠ not tracked locally")
 		case re.isLocal && !re.isRemote:
 			status = helpStyle.Render("⊘ never backed up")
+		case re.localModified && re.localVer < re.repoVer:
+			status = errorStyle.Render("⚡ conflict (local modified + repo newer)")
+		case re.localModified:
+			status = warningStyle.Render("⚠ modified locally — backup recommended")
 		case re.localVer < re.repoVer:
 			status = warningStyle.Render(fmt.Sprintf("⬇ outdated (from %s)", re.updatedBy))
 		case re.localVer == re.repoVer && re.repoVer > 0:
@@ -221,4 +237,14 @@ func (m Model) viewRemoteView() string {
 	b.WriteString(helpStyle.Render("esc back"))
 
 	return boxStyle.Render(b.String())
+}
+
+// findConfigEntry returns a config.Entry for the given path, used for hashing.
+func findConfigEntry(cfg *config.Config, path string) config.Entry {
+	for _, e := range cfg.Entries {
+		if e.Path == path {
+			return e
+		}
+	}
+	return config.Entry{Path: path}
 }

@@ -12,9 +12,10 @@ import (
 
 // EntryVersion tracks the version of a single backed-up entry.
 type EntryVersion struct {
-	Version   int       `yaml:"version"`
-	UpdatedAt time.Time `yaml:"updated_at"`
-	UpdatedBy string    `yaml:"updated_by,omitempty"` // hostname
+	Version     int       `yaml:"version"`
+	UpdatedAt   time.Time `yaml:"updated_at"`
+	UpdatedBy   string    `yaml:"updated_by,omitempty"` // hostname
+	ContentHash string    `yaml:"content_hash,omitempty"`
 }
 
 // Manifest tracks versions of all entries in the repo.
@@ -60,11 +61,12 @@ func (m *Manifest) Save(repoPath string) error {
 	return os.WriteFile(path, data, 0644)
 }
 
-// BumpVersion increments the version for an entry path and records the timestamp.
-func (m *Manifest) BumpVersion(entryPath string) {
+// BumpVersion increments the version for an entry path and records the timestamp and hash.
+func (m *Manifest) BumpVersion(entryPath string, contentHash string) {
 	ev := m.Entries[entryPath]
 	ev.Version++
 	ev.UpdatedAt = time.Now()
+	ev.ContentHash = contentHash
 	if host, err := os.Hostname(); err == nil {
 		ev.UpdatedBy = host
 	}

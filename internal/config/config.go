@@ -16,6 +16,7 @@ type Entry struct {
 	Tags         []string `yaml:"tags,omitempty"`
 	IsDir        bool     `yaml:"is_dir,omitempty"`
 	LocalVersion int      `yaml:"local_version,omitempty"` // last backed-up or restored version
+	LastHash     string   `yaml:"last_hash,omitempty"`     // hash at last backup or restore
 }
 
 // Config holds all dfc configuration.

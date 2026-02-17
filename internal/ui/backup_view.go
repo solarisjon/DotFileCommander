@@ -63,6 +63,7 @@ func (m Model) handleBackupProgress(msg backupProgressMsg) (tea.Model, tea.Cmd) 
 		item := &m.progressItems[msg.Index]
 		item.done = msg.Done
 		item.err = msg.Err
+		item.contentHash = msg.ContentHash
 		if msg.BytesTotal > 0 {
 			item.percent = float64(msg.BytesCopied) / float64(msg.BytesTotal)
 		} else if msg.Done {
@@ -90,8 +91,9 @@ func (m Model) handleBackupProgress(msg backupProgressMsg) (tea.Model, tea.Cmd) 
 		for i, item := range m.progressItems {
 			if item.done && item.err == nil && i < len(m.cfg.Entries) {
 				e := &m.cfg.Entries[i]
-				mf.BumpVersion(e.Path)
+				mf.BumpVersion(e.Path, item.contentHash)
 				e.LocalVersion = mf.GetVersion(e.Path)
+				e.LastHash = item.contentHash
 			}
 		}
 		_ = mf.Save(m.cfg.RepoPath)

@@ -9,17 +9,19 @@ import (
 	"strings"
 
 	"github.com/solarisjon/dfc/internal/config"
+	"github.com/solarisjon/dfc/internal/hash"
 )
 
 // Progress reports the status of a single entry backup.
 type Progress struct {
-	Entry   config.Entry
-	Index   int
-	Total   int
-	Done    bool
-	Err     error
+	Entry       config.Entry
+	Index       int
+	Total       int
+	Done        bool
+	Err         error
 	BytesCopied int64
 	BytesTotal  int64
+	ContentHash string // SHA256 hash of the source after backup
 }
 
 // Run backs up all entries into the repo working tree.
@@ -50,6 +52,13 @@ func Run(entries []config.Entry, repoPath string) <-chan Progress {
 
 			p.Done = true
 			p.Err = err
+			if err == nil {
+				// Compute hash of the source for state tracking
+				h, hashErr := hash.HashEntry(entry)
+				if hashErr == nil {
+					p.ContentHash = h
+				}
+			}
 			ch <- p
 		}
 	}()

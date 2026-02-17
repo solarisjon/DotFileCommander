@@ -32,6 +32,7 @@ type restoreEntryItem struct {
 	entry    config.Entry
 	idx      int // original index in cfg.Entries
 	selected bool
+	conflict restore.ConflictState
 }
 
 func (m *Model) initRestoreView() {
@@ -82,13 +83,23 @@ func (m *Model) buildRestoreEntries() {
 		filtered = restore.FilterByTags(m.cfg.Entries, selectedTags)
 	}
 
+	// Check conflicts
+	var conflicts []restore.ConflictResult
+	if m.restoreManifest != nil {
+		conflicts = restore.CheckConflicts(filtered, m.restoreManifest)
+	}
+
 	m.restoreEntries = make([]restoreEntryItem, len(filtered))
 	for i, e := range filtered {
-		m.restoreEntries[i] = restoreEntryItem{
+		item := restoreEntryItem{
 			entry:    e,
 			idx:      i,
 			selected: true, // default all selected
 		}
+		if conflicts != nil {
+			item.conflict = conflicts[i].State
+		}
+		m.restoreEntries[i] = item
 	}
 }
 
@@ -166,7 +177,7 @@ func (m Model) handleRestoreProgress(msg restoreProgressMsg) (tea.Model, tea.Cmd
 	if allDone {
 		m.progressDone = true
 
-		// Update local versions from manifest for successfully restored entries
+		// Update local versions and hashes from manifest for successfully restored entries
 		mf, err := manifest.Load(m.cfg.RepoPath)
 		if err == nil {
 			// Build list of restored entries to match progress items
@@ -178,10 +189,12 @@ func (m Model) handleRestoreProgress(msg restoreProgressMsg) (tea.Model, tea.Cmd
 			}
 			for i, item := range m.progressItems {
 				if item.done && item.err == nil && i < len(restored) {
-					// Find this entry in cfg and update its local version
+					// Find this entry in cfg and update its local version + hash
 					for j := range m.cfg.Entries {
 						if m.cfg.Entries[j].Path == restored[i].Path {
 							m.cfg.Entries[j].LocalVersion = mf.GetVersion(restored[i].Path)
+							// Hash the restored content so future modifications can be detected
+							m.cfg.Entries[j].LastHash = mf.Entries[restored[i].Path].ContentHash
 							break
 						}
 					}
@@ -289,23 +302,38 @@ func (m Model) updateRestoreEntries(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "enter":
 		// Count selected
 		count := 0
+		hasConflicts := false
 		for _, item := range m.restoreEntries {
 			if item.selected {
 				count++
+				if item.conflict == restore.StateModifiedLocal || item.conflict == restore.StateConflict {
+					hasConflicts = true
+				}
 			}
 		}
 		if count == 0 {
 			m.errMsg = "No entries selected"
 			return m, nil
 		}
+		// If there are conflicts and we haven't confirmed, show warning
+		if hasConflicts && !m.restoreConfirmed {
+			m.restoreConfirmed = true
+			m.errMsg = "⚠ Some entries modified locally! Press enter again to force, or deselect them first."
+			return m, nil
+		}
 		m.errMsg = ""
+		m.restoreConfirmed = false
 		m.restoreStep = restoreStepRunning
 		return m, m.startRestore()
 	case "esc":
+		m.restoreConfirmed = false
 		m.restoreStep = restoreStepTags
 		m.restoreCursor = 0
 		return m, nil
 	}
+	// Reset confirmation if user changes selection
+	m.restoreConfirmed = false
+	m.errMsg = ""
 	return m, nil
 }
 
@@ -497,6 +525,14 @@ func (m Model) viewRestoreEntries() string {
 					verInfo = successStyle.Render(fmt.Sprintf("v%d ✓", repoVer))
 				}
 			}
+		}
+
+		// Add conflict state indicator
+		switch item.conflict {
+		case restore.StateModifiedLocal:
+			verInfo += " " + warningStyle.Render("⚠ modified locally")
+		case restore.StateConflict:
+			verInfo += " " + errorStyle.Render("⚡ conflict")
 		}
 
 		rlines[idx] = rl{left: left, leftWidth: leftWidth, ver: verInfo}

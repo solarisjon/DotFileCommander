@@ -68,13 +68,14 @@ type Model struct {
 	backupCh      <-chan backup.Progress
 
 	// Restore selection
-	restoreStep     int // restoreStep* constants
-	restoreCursor   int
-	restoreTags     []restoreTagItem
-	restoreAllTags  bool
-	restoreEntries  []restoreEntryItem
-	restoreCh       <-chan restore.Progress
-	restoreManifest *manifest.Manifest
+	restoreStep      int // restoreStep* constants
+	restoreCursor    int
+	restoreTags      []restoreTagItem
+	restoreAllTags   bool
+	restoreEntries   []restoreEntryItem
+	restoreCh        <-chan restore.Progress
+	restoreManifest  *manifest.Manifest
+	restoreConfirmed bool
 
 	// Error display
 	errMsg string
@@ -87,10 +88,11 @@ type Model struct {
 }
 
 type progressItem struct {
-	name    string
-	done    bool
-	err     error
-	percent float64
+	name        string
+	done        bool
+	err         error
+	percent     float64
+	contentHash string
 }
 
 // New creates a new root model.
