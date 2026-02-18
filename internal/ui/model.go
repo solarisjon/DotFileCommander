@@ -23,6 +23,7 @@ const (
 	viewConfigBrowser
 	viewRemote
 	viewReset
+	viewProfileEdit
 )
 
 // Model is the root bubbletea model.
@@ -91,6 +92,13 @@ type Model struct {
 	resetStep      int
 	resetConfirmed bool
 
+	// Profile edit
+	profileInput   textinput.Model
+	profileReturn  view // view to return to after profile edit
+
+	// Add entry — profile toggle
+	addProfileSpecific bool
+
 	quitting bool
 }
 
@@ -134,6 +142,11 @@ func New(cfg *config.Config) Model {
 	browserTagTi.CharLimit = 200
 	browserTagTi.Width = 40
 
+	profileTi := textinput.New()
+	profileTi.Placeholder = "work"
+	profileTi.CharLimit = 50
+	profileTi.Width = 30
+
 	startView := viewMainMenu
 	if !cfg.IsConfigured() {
 		startView = viewSetup
@@ -154,13 +167,14 @@ func New(cfg *config.Config) Model {
 	return Model{
 		cfg:         cfg,
 		currentView: startView,
-		menuItems:   []string{"Backup", "Restore", "Manage Entries", "Remote Status", "Reset", "Settings"},
+		menuItems:   []string{"Backup", "Restore", "Manage Entries", "Remote Status", "Reset", "Device Profile", "Settings"},
 		setupInput:  ti,
 		addInput:    addTi,
 		addNameInput: nameTi,
 		addTagInput: tagTi,
 		tagInput:    tagEditTi,
 		browserTagInput: browserTagTi,
+		profileInput: profileTi,
 		ghStatus:    ghSt,
 		setupStep:   initialStep,
 	}
@@ -223,6 +237,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.updateRemoteView(msg)
 	case viewReset:
 		return m.updateResetView(msg)
+	case viewProfileEdit:
+		return m.updateProfileEdit(msg)
 	}
 
 	return m, nil
@@ -254,6 +270,8 @@ func (m Model) View() string {
 		return m.viewRemoteView()
 	case viewReset:
 		return m.viewResetView()
+	case viewProfileEdit:
+		return m.viewProfileEdit()
 	}
 
 	return ""

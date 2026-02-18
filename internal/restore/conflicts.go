@@ -4,6 +4,7 @@ import (
 	"github.com/solarisjon/dfc/internal/config"
 	"github.com/solarisjon/dfc/internal/hash"
 	"github.com/solarisjon/dfc/internal/manifest"
+	"github.com/solarisjon/dfc/internal/storage"
 )
 
 // ConflictState describes the sync state of a local entry vs the repo.
@@ -43,14 +44,15 @@ type ConflictResult struct {
 // CheckConflicts computes the conflict state for each entry by comparing the
 // current local content hash against the last-known hash (stored in config)
 // and the repo manifest version/hash.
-func CheckConflicts(entries []config.Entry, mf *manifest.Manifest) []ConflictResult {
+func CheckConflicts(entries []config.Entry, mf *manifest.Manifest, profile string) []ConflictResult {
 	results := make([]ConflictResult, len(entries))
 
 	for i, e := range entries {
 		cr := ConflictResult{Entry: e}
 
-		// Get repo info
-		mv := mf.GetEntry(e.Path)
+		// Get repo info using storage-aware manifest key
+		mkey := storage.ManifestKey(e, profile)
+		mv := mf.GetEntry(mkey)
 		cr.RepoHash = mv.ContentHash
 
 		// Compute current local hash

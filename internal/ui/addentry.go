@@ -21,6 +21,20 @@ func (m Model) updateAddEntry(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.currentView = viewEntryList
 			return m, nil
 
+		case "y":
+			if m.addStep == 3 {
+				m.addProfileSpecific = true
+				// Fall through to enter handling
+				msg = tea.KeyMsg{Type: tea.KeyEnter}
+				return m.updateAddEntry(msg)
+			}
+		case "n":
+			if m.addStep == 3 {
+				m.addProfileSpecific = false
+				msg = tea.KeyMsg{Type: tea.KeyEnter}
+				return m.updateAddEntry(msg)
+			}
+
 		case "enter":
 			switch m.addStep {
 			case 0: // Path entered
@@ -42,7 +56,12 @@ func (m Model) updateAddEntry(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.addTagInput.Focus()
 				return m, m.addTagInput.Focus()
 
-			case 2: // Tags entered — save
+			case 2: // Tags entered — ask profile-specific
+				m.addProfileSpecific = false
+				m.addStep = 3
+				return m, nil
+
+			case 3: // Profile-specific answered — save
 				path := strings.TrimSpace(m.addInput.Value())
 				name := strings.TrimSpace(m.addNameInput.Value())
 				tagsStr := strings.TrimSpace(m.addTagInput.Value())
@@ -58,10 +77,11 @@ func (m Model) updateAddEntry(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 
 				e := config.Entry{
-					Path:  path,
-					Name:  name,
-					IsDir: m.addIsDir,
-					Tags:  tags,
+					Path:            path,
+					Name:            name,
+					IsDir:           m.addIsDir,
+					Tags:            tags,
+					ProfileSpecific: m.addProfileSpecific,
 				}
 
 				if err := m.cfg.AddEntry(e); err != nil {
@@ -95,7 +115,7 @@ func (m Model) viewAddEntry() string {
 	b.WriteString(titleStyle.Render("➕ Add Entry"))
 	b.WriteString("\n\n")
 
-	steps := []string{"Path", "Friendly Name", "Tags"}
+	steps := []string{"Path", "Friendly Name", "Tags", "Profile-Specific"}
 	for i, step := range steps {
 		prefix := "  "
 		if i == m.addStep {
@@ -122,6 +142,14 @@ func (m Model) viewAddEntry() string {
 		b.WriteString(fmt.Sprintf("Name: %s\n\n", helpStyle.Render(m.addNameInput.Value())))
 		b.WriteString("Enter tags (comma-separated):\n\n")
 		b.WriteString(m.addTagInput.View())
+	case 3:
+		b.WriteString(fmt.Sprintf("Path: %s\n", helpStyle.Render(m.addInput.Value())))
+		b.WriteString(fmt.Sprintf("Name: %s\n", helpStyle.Render(m.addNameInput.Value())))
+		if m.addTagInput.Value() != "" {
+			b.WriteString(fmt.Sprintf("Tags: %s\n", helpStyle.Render(m.addTagInput.Value())))
+		}
+		b.WriteString("\nStore a separate copy per device profile? (y/n)\n\n")
+		b.WriteString(helpStyle.Render("Profile-specific entries are backed up per device."))
 	}
 
 	b.WriteString("\n\n")
@@ -131,7 +159,11 @@ func (m Model) viewAddEntry() string {
 		b.WriteString("\n\n")
 	}
 
-	b.WriteString(helpStyle.Render("enter next • esc back"))
+	if m.addStep == 3 {
+		b.WriteString(helpStyle.Render("y yes • n no • esc back"))
+	} else {
+		b.WriteString(helpStyle.Render("enter next • esc back"))
+	}
 
 	return boxStyle.Render(b.String())
 }

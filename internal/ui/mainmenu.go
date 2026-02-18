@@ -21,9 +21,25 @@ func (m Model) updateMainMenu(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "enter":
 			switch m.menuCursor {
 			case 0: // Backup
+				if m.needsProfile() {
+					m.profileInput.SetValue("")
+					m.profileInput.Focus()
+					m.profileReturn = viewBackup
+					m.currentView = viewProfileEdit
+					m.errMsg = ""
+					return m, m.profileInput.Focus()
+				}
 				m.currentView = viewBackup
 				return m, m.startBackup()
 			case 1: // Restore
+				if m.needsProfile() {
+					m.profileInput.SetValue("")
+					m.profileInput.Focus()
+					m.profileReturn = viewRestore
+					m.currentView = viewProfileEdit
+					m.errMsg = ""
+					return m, m.profileInput.Focus()
+				}
 				m.currentView = viewRestore
 				m.initRestoreView()
 				return m, nil
@@ -37,7 +53,14 @@ func (m Model) updateMainMenu(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.currentView = viewReset
 				m.initResetView()
 				return m, nil
-			case 5: // Settings
+			case 5: // Device Profile
+				m.profileInput.SetValue(m.cfg.DeviceProfile)
+				m.profileInput.Focus()
+				m.profileReturn = viewMainMenu
+				m.currentView = viewProfileEdit
+				m.errMsg = ""
+				return m, m.profileInput.Focus()
+			case 6: // Settings
 				m.currentView = viewSetup
 				m.setupStep = 0
 			}
@@ -71,11 +94,14 @@ func (m Model) viewMainMenu() string {
 	// Show tracked entries count and repo info
 	entryCount := len(m.cfg.Entries)
 	if entryCount > 0 {
-		b.WriteString(helpStyle.Render(
-			strings.Join([]string{
-				pluralize(entryCount, "entry", "entries") + " tracked",
-				"repo: " + m.cfg.RepoURL,
-			}, " • ")))
+		info := []string{
+			pluralize(entryCount, "entry", "entries") + " tracked",
+			"repo: " + m.cfg.RepoURL,
+		}
+		if m.cfg.DeviceProfile != "" {
+			info = append(info, "profile: "+m.cfg.DeviceProfile)
+		}
+		b.WriteString(helpStyle.Render(strings.Join(info, " • ")))
 	} else {
 		b.WriteString(helpStyle.Render("No entries tracked yet — add some via Manage Entries"))
 	}
@@ -86,7 +112,20 @@ func (m Model) viewMainMenu() string {
 	return boxStyle.Render(b.String())
 }
 
-var menuIcons = []string{"⬆", "⬇", "📋", "🌐", "🔄", "⚙"}
+var menuIcons = []string{"⬆", "⬇", "📋", "🌐", "🔄", "👤", "⚙"}
+
+// needsProfile returns true if there are profile-specific entries but no device profile set.
+func (m Model) needsProfile() bool {
+	if m.cfg.DeviceProfile != "" {
+		return false
+	}
+	for _, e := range m.cfg.Entries {
+		if e.ProfileSpecific {
+			return true
+		}
+	}
+	return false
+}
 
 func pluralize(n int, singular, plural string) string {
 	if n == 1 {

@@ -10,20 +10,22 @@ import (
 
 // Entry represents a tracked dotfile or directory.
 type Entry struct {
-	Path         string   `yaml:"path"`
-	Name         string   `yaml:"name"`
-	Description  string   `yaml:"description,omitempty"`
-	Tags         []string `yaml:"tags,omitempty"`
-	IsDir        bool     `yaml:"is_dir,omitempty"`
-	LocalVersion int      `yaml:"local_version,omitempty"` // last backed-up or restored version
-	LastHash     string   `yaml:"last_hash,omitempty"`     // hash at last backup or restore
+	Path            string   `yaml:"path"`
+	Name            string   `yaml:"name"`
+	Description     string   `yaml:"description,omitempty"`
+	Tags            []string `yaml:"tags,omitempty"`
+	IsDir           bool     `yaml:"is_dir,omitempty"`
+	ProfileSpecific bool     `yaml:"profile_specific,omitempty"` // stored per device profile
+	LocalVersion    int      `yaml:"local_version,omitempty"`    // last backed-up or restored version
+	LastHash        string   `yaml:"last_hash,omitempty"`        // hash at last backup or restore
 }
 
 // Config holds all dfc configuration.
 type Config struct {
-	RepoURL  string  `yaml:"repo_url"`
-	RepoPath string  `yaml:"repo_path"`
-	Entries  []Entry `yaml:"entries,omitempty"`
+	RepoURL       string  `yaml:"repo_url"`
+	RepoPath      string  `yaml:"repo_path"`
+	DeviceProfile string  `yaml:"device_profile,omitempty"` // e.g. "work", "home"
+	Entries       []Entry `yaml:"entries,omitempty"`
 }
 
 func Dir() (string, error) {

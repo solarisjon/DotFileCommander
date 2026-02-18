@@ -5,10 +5,10 @@ import (
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/solarisjon/dfc/internal/config"
 	"github.com/solarisjon/dfc/internal/entry"
 	"github.com/solarisjon/dfc/internal/hash"
 	"github.com/solarisjon/dfc/internal/manifest"
+	"github.com/solarisjon/dfc/internal/storage"
 	gsync "github.com/solarisjon/dfc/internal/sync"
 )
 
@@ -34,16 +34,17 @@ func (m Model) updateRemoteView(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 type remoteEntry struct {
-	name          string
-	path          string
-	tags          string
-	tagsPlain     int
-	repoVer       int
-	localVer      int
-	updatedBy     string
-	isLocal       bool // exists in local config
-	isRemote      bool // exists in remote manifest
-	localModified bool // local content differs from last known hash
+	name            string
+	path            string
+	tags            string
+	tagsPlain       int
+	repoVer         int
+	localVer        int
+	updatedBy       string
+	isLocal         bool // exists in local config
+	isRemote        bool // exists in remote manifest
+	localModified   bool // local content differs from last known hash
+	profileSpecific bool // entry is profile-specific
 }
 
 func (m *Model) initRemoteView() tea.Cmd {
@@ -63,68 +64,60 @@ func (m *Model) loadRemoteData() {
 		return
 	}
 
-	// Build lookup of local entries by path
-	localByPath := make(map[string]*localEntryInfo)
-	for _, e := range m.cfg.Entries {
-		localByPath[e.Path] = &localEntryInfo{
-			name:     e.Name,
-			tags:     e.Tags,
-			localVer: e.LocalVersion,
-			lastHash: e.LastHash,
-			isDir:    e.IsDir,
-		}
-	}
-
 	var entries []remoteEntry
 
-	// Add all entries from manifest (remote)
-	for path, ev := range mf.Entries {
+	// Track which manifest keys we've seen
+	seenKeys := make(map[string]bool)
+
+	// Build entries from local config, looking up their manifest keys
+	for _, e := range m.cfg.Entries {
+		mkey := storage.ManifestKey(e, m.cfg.DeviceProfile)
+		seenKeys[mkey] = true
+		ev := mf.GetEntry(mkey)
+
 		re := remoteEntry{
-			path:      path,
+			path:      e.Path,
+			name:      e.Name,
 			repoVer:   ev.Version,
 			updatedBy: ev.UpdatedBy,
-			isRemote:  true,
-		}
-		if local, ok := localByPath[path]; ok {
-			re.isLocal = true
-			re.name = local.name
-			re.localVer = local.localVer
-			if len(local.tags) > 0 {
-				re.tags = strings.Join(local.tags, ", ")
-				re.tagsPlain = len(re.tags)
-			}
-			// Detect local modifications via hash comparison
-			if local.lastHash != "" {
-				currentHash, err := hash.HashEntry(findConfigEntry(m.cfg, path))
-				if err == nil && currentHash != local.lastHash {
-					re.localModified = true
-				}
-			}
-			delete(localByPath, path) // mark as seen
-		} else {
-			re.name = entry.FriendlyName(path)
+			isRemote:  ev.Version > 0,
+			isLocal:   true,
+			localVer:  e.LocalVersion,
 		}
 		if re.name == "" {
-			re.name = entry.FriendlyName(path)
+			re.name = entry.FriendlyName(e.Path)
+		}
+		if len(e.Tags) > 0 {
+			re.tags = strings.Join(e.Tags, ", ")
+			re.tagsPlain = len(re.tags)
+		}
+		if e.ProfileSpecific {
+			re.profileSpecific = true
+		}
+		// Detect local modifications via hash comparison
+		if e.LastHash != "" {
+			currentHash, hashErr := hash.HashEntry(e)
+			if hashErr == nil && currentHash != e.LastHash {
+				re.localModified = true
+			}
 		}
 		entries = append(entries, re)
 	}
 
-	// Add local-only entries (not in manifest yet — never backed up)
-	for path, local := range localByPath {
+	// Add manifest entries not in local config (from other profiles or untracked)
+	for mkey, ev := range mf.Entries {
+		if seenKeys[mkey] {
+			continue
+		}
+		// Extract the display path from the manifest key
+		displayPath := manifestKeyToPath(mkey)
 		re := remoteEntry{
-			path:     path,
-			name:     local.name,
-			localVer: local.localVer,
-			isLocal:  true,
-			isRemote: false,
-		}
-		if re.name == "" {
-			re.name = entry.FriendlyName(path)
-		}
-		if len(local.tags) > 0 {
-			re.tags = strings.Join(local.tags, ", ")
-			re.tagsPlain = len(re.tags)
+			path:      displayPath,
+			name:      entry.FriendlyName(displayPath),
+			repoVer:   ev.Version,
+			updatedBy: ev.UpdatedBy,
+			isRemote:  true,
+			isLocal:   false,
 		}
 		entries = append(entries, re)
 	}
@@ -132,12 +125,22 @@ func (m *Model) loadRemoteData() {
 	m.remoteEntries = entries
 }
 
-type localEntryInfo struct {
-	name     string
-	tags     []string
-	localVer int
-	lastHash string
-	isDir    bool
+// manifestKeyToPath extracts the original entry path from a manifest key.
+// "shared/~/.bashrc" → "~/.bashrc"
+// "profiles/work/~/.config/claude" → "~/.config/claude"
+func manifestKeyToPath(key string) string {
+	if strings.HasPrefix(key, "shared/") {
+		return key[len("shared/"):]
+	}
+	if strings.HasPrefix(key, "profiles/") {
+		// profiles/<name>/<path>
+		rest := key[len("profiles/"):]
+		idx := strings.Index(rest, "/")
+		if idx >= 0 {
+			return rest[idx+1:]
+		}
+	}
+	return key // legacy key format
 }
 
 func (m Model) viewRemoteView() string {
@@ -237,14 +240,4 @@ func (m Model) viewRemoteView() string {
 	b.WriteString(helpStyle.Render("esc back"))
 
 	return boxStyle.Render(b.String())
-}
-
-// findConfigEntry returns a config.Entry for the given path, used for hashing.
-func findConfigEntry(cfg *config.Config, path string) config.Entry {
-	for _, e := range cfg.Entries {
-		if e.Path == path {
-			return e
-		}
-	}
-	return config.Entry{Path: path}
 }

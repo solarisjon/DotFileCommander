@@ -9,6 +9,7 @@ import (
 	"github.com/solarisjon/dfc/internal/entry"
 	"github.com/solarisjon/dfc/internal/manifest"
 	"github.com/solarisjon/dfc/internal/restore"
+	"github.com/solarisjon/dfc/internal/storage"
 	gsync "github.com/solarisjon/dfc/internal/sync"
 )
 
@@ -86,7 +87,7 @@ func (m *Model) buildRestoreEntries() {
 	// Check conflicts
 	var conflicts []restore.ConflictResult
 	if m.restoreManifest != nil {
-		conflicts = restore.CheckConflicts(filtered, m.restoreManifest)
+		conflicts = restore.CheckConflicts(filtered, m.restoreManifest, m.cfg.DeviceProfile)
 	}
 
 	m.restoreEntries = make([]restoreEntryItem, len(filtered))
@@ -129,7 +130,7 @@ func (m *Model) runRestore() tea.Cmd {
 	}
 	m.progressDone = false
 
-	ch := restore.Run(entries, m.cfg.RepoPath)
+	ch := restore.Run(entries, m.cfg.RepoPath, m.cfg.DeviceProfile)
 	m.restoreCh = ch
 
 	return waitForRestoreProgress(ch)
@@ -192,9 +193,10 @@ func (m Model) handleRestoreProgress(msg restoreProgressMsg) (tea.Model, tea.Cmd
 					// Find this entry in cfg and update its local version + hash
 					for j := range m.cfg.Entries {
 						if m.cfg.Entries[j].Path == restored[i].Path {
-							m.cfg.Entries[j].LocalVersion = mf.GetVersion(restored[i].Path)
+							mkey := storage.ManifestKey(m.cfg.Entries[j], m.cfg.DeviceProfile)
+							m.cfg.Entries[j].LocalVersion = mf.GetVersion(mkey)
 							// Hash the restored content so future modifications can be detected
-							m.cfg.Entries[j].LastHash = mf.Entries[restored[i].Path].ContentHash
+							m.cfg.Entries[j].LastHash = mf.Entries[mkey].ContentHash
 							break
 						}
 					}
@@ -518,7 +520,8 @@ func (m Model) viewRestoreEntries() string {
 
 		verInfo := ""
 		if m.restoreManifest != nil {
-			repoVer := m.restoreManifest.GetVersion(item.entry.Path)
+			mkey := storage.ManifestKey(item.entry, m.cfg.DeviceProfile)
+			repoVer := m.restoreManifest.GetVersion(mkey)
 			localVer := item.entry.LocalVersion
 			if repoVer > 0 {
 				if localVer < repoVer {

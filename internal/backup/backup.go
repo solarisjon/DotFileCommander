@@ -10,6 +10,7 @@ import (
 
 	"github.com/solarisjon/dfc/internal/config"
 	"github.com/solarisjon/dfc/internal/hash"
+	"github.com/solarisjon/dfc/internal/storage"
 )
 
 // Progress reports the status of a single entry backup.
@@ -26,7 +27,8 @@ type Progress struct {
 
 // Run backs up all entries into the repo working tree.
 // It sends progress updates on the returned channel.
-func Run(entries []config.Entry, repoPath string) <-chan Progress {
+// The profile parameter determines where profile-specific entries are stored.
+func Run(entries []config.Entry, repoPath string, profile string) <-chan Progress {
 	ch := make(chan Progress)
 
 	go func() {
@@ -39,8 +41,8 @@ func Run(entries []config.Entry, repoPath string) <-chan Progress {
 			p := Progress{Entry: entry, Index: i, Total: total}
 
 			srcPath := expandHome(entry.Path)
-			// Store relative to home dir inside repo
-			relPath := homeRelative(entry.Path)
+			// Use storage paths: shared/ or profiles/<profile>/
+			relPath := storage.RepoDir(entry, profile)
 			destPath := filepath.Join(repoPath, relPath)
 
 			var err error

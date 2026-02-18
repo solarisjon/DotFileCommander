@@ -7,6 +7,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/solarisjon/dfc/internal/entry"
 	"github.com/solarisjon/dfc/internal/manifest"
+	"github.com/solarisjon/dfc/internal/storage"
 )
 
 func (m Model) updateEntryList(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -28,6 +29,7 @@ func (m Model) updateEntryList(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.addInput.SetValue("")
 			m.addNameInput.SetValue("")
 			m.addTagInput.SetValue("")
+			m.addProfileSpecific = false
 			m.addInput.Focus()
 			return m, m.addInput.Focus()
 		case "d", "delete", "backspace":
@@ -56,6 +58,12 @@ func (m Model) updateEntryList(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.browserTagInput.Focus()
 			m.currentView = viewConfigBrowser
 			return m, m.browserTagInput.Focus()
+		case "p":
+			// Toggle profile-specific
+			if len(m.cfg.Entries) > 0 && m.entryCursor < len(m.cfg.Entries) {
+				m.cfg.Entries[m.entryCursor].ProfileSpecific = !m.cfg.Entries[m.entryCursor].ProfileSpecific
+				_ = m.cfg.Save()
+			}
 		case "esc", "q":
 			m.currentView = viewMainMenu
 		}
@@ -111,6 +119,9 @@ func (m Model) viewEntryList() string {
 			if e.IsDir {
 				icon = "📁"
 			}
+			if e.ProfileSpecific {
+				icon += "👤"
+			}
 
 			tags := ""
 			tagsPlain := 0
@@ -133,7 +144,8 @@ func (m Model) viewEntryList() string {
 
 			verInfo := ""
 			if mf != nil {
-				repoVer := mf.GetVersion(e.Path)
+				mkey := storage.ManifestKey(e, m.cfg.DeviceProfile)
+				repoVer := mf.GetVersion(mkey)
 				if repoVer > 0 {
 					if e.LocalVersion < repoVer {
 						verInfo = warningStyle.Render(fmt.Sprintf("⬆ v%d→v%d", e.LocalVersion, repoVer))
@@ -167,7 +179,7 @@ func (m Model) viewEntryList() string {
 		b.WriteString("\n")
 	}
 
-	b.WriteString(helpStyle.Render("a add • b browse ~/.config • d delete • t tags • esc back"))
+	b.WriteString(helpStyle.Render("a add • b browse ~/.config • d delete • t tags • p profile-specific • esc back"))
 
 	return boxStyle.Render(b.String())
 }

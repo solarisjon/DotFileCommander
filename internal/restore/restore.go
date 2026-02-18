@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/solarisjon/dfc/internal/config"
+	"github.com/solarisjon/dfc/internal/storage"
 )
 
 // Progress reports the status of a single entry restore.
@@ -46,7 +47,8 @@ func FilterByTags(entries []config.Entry, tags []string) []config.Entry {
 }
 
 // Run restores entries from the repo to the filesystem.
-func Run(entries []config.Entry, repoPath string) <-chan Progress {
+// The profile parameter determines where profile-specific entries are read from.
+func Run(entries []config.Entry, repoPath string, profile string) <-chan Progress {
 	ch := make(chan Progress)
 
 	go func() {
@@ -58,7 +60,8 @@ func Run(entries []config.Entry, repoPath string) <-chan Progress {
 		for i, entry := range entries {
 			p := Progress{Entry: entry, Index: i, Total: total}
 
-			relPath := homeRelative(entry.Path)
+			// Use storage paths: shared/ or profiles/<profile>/
+			relPath := storage.RepoDir(entry, profile)
 			srcPath := filepath.Join(repoPath, relPath)
 			dstPath := expandHome(entry.Path)
 

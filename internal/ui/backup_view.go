@@ -7,6 +7,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/solarisjon/dfc/internal/backup"
 	"github.com/solarisjon/dfc/internal/manifest"
+	"github.com/solarisjon/dfc/internal/storage"
 	gsync "github.com/solarisjon/dfc/internal/sync"
 )
 
@@ -31,18 +32,15 @@ func (m *Model) checkBackupConflicts() []string {
 	}
 	var conflicts []string
 	for _, e := range m.cfg.Entries {
-		mv := mf.GetEntry(e.Path)
+		mkey := storage.ManifestKey(e, m.cfg.DeviceProfile)
+		mv := mf.GetEntry(mkey)
 		if mv.Version == 0 {
 			continue // never backed up, no conflict possible
 		}
-		// If we have a last-known hash and the repo hash differs, another
-		// device changed this entry since we last synced.
 		if e.LastHash != "" && mv.ContentHash != "" && mv.ContentHash != e.LastHash {
 			conflicts = append(conflicts, e.Path)
 		}
-		// If repo version is ahead of our local version, someone else backed up.
 		if mv.Version > e.LocalVersion && e.LocalVersion > 0 {
-			// Avoid duplicates
 			alreadyAdded := false
 			for _, c := range conflicts {
 				if c == e.Path {
@@ -69,7 +67,7 @@ func (m *Model) runBackup() tea.Cmd {
 	}
 	m.progressDone = false
 
-	ch := backup.Run(m.cfg.Entries, m.cfg.RepoPath)
+	ch := backup.Run(m.cfg.Entries, m.cfg.RepoPath, m.cfg.DeviceProfile)
 	m.backupCh = ch
 
 	return waitForBackupProgress(ch)
@@ -90,6 +88,14 @@ func (m Model) handleRepoSyncDone(msg repoSyncDoneMsg) (tea.Model, tea.Cmd) {
 		m.errMsg = fmt.Sprintf("Repo sync failed: %v", msg.err)
 		m.progressDone = true
 		return m, nil
+	}
+	// Migrate legacy repo layout (flat → shared/profiles/) if needed
+	mf, err := manifest.Load(m.cfg.RepoPath)
+	if err != nil {
+		mf = &manifest.Manifest{Entries: make(map[string]manifest.EntryVersion)}
+	}
+	if migrated, err := storage.MigrateLegacyLayout(m.cfg, mf); err == nil && migrated > 0 {
+		_ = mf.Save(m.cfg.RepoPath)
 	}
 	// Check if repo was modified by another device
 	conflicts := m.checkBackupConflicts()
@@ -134,8 +140,9 @@ func (m Model) handleBackupProgress(msg backupProgressMsg) (tea.Model, tea.Cmd) 
 		for i, item := range m.progressItems {
 			if item.done && item.err == nil && i < len(m.cfg.Entries) {
 				e := &m.cfg.Entries[i]
-				bumped := mf.BumpVersion(e.Path, item.contentHash)
-				e.LocalVersion = mf.GetVersion(e.Path)
+				mkey := storage.ManifestKey(*e, m.cfg.DeviceProfile)
+				bumped := mf.BumpVersion(mkey, item.contentHash)
+				e.LocalVersion = mf.GetVersion(mkey)
 				e.LastHash = item.contentHash
 				if bumped {
 					changed++
