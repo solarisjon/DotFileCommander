@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 	"github.com/solarisjon/dfc/internal/config"
 	"github.com/solarisjon/dfc/internal/entry"
 	"github.com/solarisjon/dfc/internal/manifest"
@@ -370,7 +371,7 @@ func (m Model) viewRestoreProgress() string {
 func (m Model) viewRestoreTags() string {
 	var b strings.Builder
 
-	b.WriteString(titleStyle.Render("⬇ Restore — Filter by Tags"))
+	b.WriteString(sectionHeader("⬇", "Restore — Filter by Tags"))
 	b.WriteString("\n\n")
 
 	if len(m.restoreTags) == 0 {
@@ -424,7 +425,7 @@ func (m Model) viewRestoreTags() string {
 func (m Model) viewRestoreEntries() string {
 	var b strings.Builder
 
-	b.WriteString(titleStyle.Render("⬇ Restore — Select Entries"))
+	b.WriteString(sectionHeader("⬇", "Restore — Select Entries"))
 	b.WriteString("\n\n")
 
 	if len(m.restoreEntries) == 0 {
@@ -586,18 +587,19 @@ func (m Model) viewRestoreEntries() string {
 func (m Model) viewRestoreRunning() string {
 	var b strings.Builder
 
-	b.WriteString(titleStyle.Render("⬇ Restore"))
+	b.WriteString(sectionHeader("⬇", "Restore"))
 	b.WriteString("\n\n")
 
 	if len(m.progressItems) == 0 && !m.progressDone {
-		b.WriteString("Syncing repository...")
+		b.WriteString(lipgloss.NewStyle().Foreground(accentColor).Render("⟳ "))
+		b.WriteString(normalStyle.Render("Syncing repository..."))
 		if m.errMsg != "" {
 			b.WriteString("\n\n")
 			b.WriteString(errorStyle.Render("✗ " + m.errMsg))
 		}
 	} else {
 		for _, item := range m.progressItems {
-			status := "  "
+			var status string
 			if item.done {
 				if item.err != nil {
 					status = errorStyle.Render("✗")
@@ -605,11 +607,12 @@ func (m Model) viewRestoreRunning() string {
 					status = successStyle.Render("✓")
 				}
 			} else {
-				status = "⋯"
+				status = lipgloss.NewStyle().Foreground(accentColor).Render("⟳")
 			}
 
-			bar := renderProgressBar(item.percent, 20)
-			line := fmt.Sprintf("%s %s %s", status, item.name, bar)
+			name := padRight(item.name, 20)
+			bar := renderGradientBar(item.percent, 20)
+			line := fmt.Sprintf(" %s  %s %s", status, name, bar)
 			b.WriteString(line)
 
 			if item.err != nil {
@@ -628,11 +631,10 @@ func (m Model) viewRestoreRunning() string {
 		b.WriteString(errorStyle.Render("✗ " + m.errMsg))
 	}
 
-	b.WriteString("\n\n")
 	if m.progressDone {
-		b.WriteString(helpStyle.Render("enter/esc back to menu"))
+		b.WriteString(statusBar("enter/esc back to menu"))
 	} else {
-		b.WriteString(helpStyle.Render("restoring..."))
+		b.WriteString(statusBar("restoring..."))
 	}
 
 	return boxStyle.Render(b.String())

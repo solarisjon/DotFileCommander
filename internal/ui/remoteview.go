@@ -146,7 +146,7 @@ func manifestKeyToPath(key string) string {
 func (m Model) viewRemoteView() string {
 	var b strings.Builder
 
-	b.WriteString(titleStyle.Render("🌐 Remote Repository Status"))
+	b.WriteString(sectionHeader("🌐", "Remote Repository Status"))
 	b.WriteString("\n\n")
 
 	if m.remoteSyncing {

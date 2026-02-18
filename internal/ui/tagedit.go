@@ -43,7 +43,7 @@ func (m Model) viewTagEdit() string {
 
 	e := m.cfg.Entries[m.tagEditIdx]
 
-	b.WriteString(titleStyle.Render("🏷  Edit Tags"))
+	b.WriteString(sectionHeader("🏷", "Edit Tags"))
 	b.WriteString("\n\n")
 	b.WriteString("Entry: " + selectedStyle.Render(e.Name) + " " + helpStyle.Render(e.Path))
 	b.WriteString("\n\n")

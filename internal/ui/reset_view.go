@@ -80,7 +80,7 @@ func (m *Model) performReset() error {
 func (m Model) viewResetView() string {
 	var b strings.Builder
 
-	b.WriteString(titleStyle.Render("🔄 Reset System"))
+	b.WriteString(sectionHeader("🔄", "Reset System"))
 	b.WriteString("\n\n")
 
 	switch m.resetStep {

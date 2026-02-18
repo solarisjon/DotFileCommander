@@ -74,7 +74,7 @@ func (m Model) updateEntryList(msg tea.Msg) (tea.Model, tea.Cmd) {
 func (m Model) viewEntryList() string {
 	var b strings.Builder
 
-	b.WriteString(titleStyle.Render("📋 Tracked Entries"))
+	b.WriteString(sectionHeader("📋", "Tracked Entries"))
 	b.WriteString("\n\n")
 
 	if len(m.cfg.Entries) == 0 {
@@ -179,7 +179,7 @@ func (m Model) viewEntryList() string {
 		b.WriteString("\n")
 	}
 
-	b.WriteString(helpStyle.Render("a add • b browse ~/.config • d delete • t tags • p profile-specific • esc back"))
+	b.WriteString(statusBar("a add • b browse • d delete • t tags • p profile • esc back"))
 
 	return boxStyle.Render(b.String())
 }

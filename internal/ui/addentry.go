@@ -112,7 +112,7 @@ func (m Model) updateAddEntry(msg tea.Msg) (tea.Model, tea.Cmd) {
 func (m Model) viewAddEntry() string {
 	var b strings.Builder
 
-	b.WriteString(titleStyle.Render("➕ Add Entry"))
+	b.WriteString(sectionHeader("➕", "Add Entry"))
 	b.WriteString("\n\n")
 
 	steps := []string{"Path", "Friendly Name", "Tags", "Profile-Specific"}
@@ -160,9 +160,9 @@ func (m Model) viewAddEntry() string {
 	}
 
 	if m.addStep == 3 {
-		b.WriteString(helpStyle.Render("y yes • n no • esc back"))
+		b.WriteString(statusBar("y yes • n no • esc back"))
 	} else {
-		b.WriteString(helpStyle.Render("enter next • esc back"))
+		b.WriteString(statusBar("enter next • esc back"))
 	}
 
 	return boxStyle.Render(b.String())

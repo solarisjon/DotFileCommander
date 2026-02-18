@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 	"github.com/solarisjon/dfc/internal/backup"
 	"github.com/solarisjon/dfc/internal/manifest"
 	"github.com/solarisjon/dfc/internal/storage"
@@ -222,35 +223,35 @@ func (m Model) updateBackupView(msg tea.Msg) (tea.Model, tea.Cmd) {
 func (m Model) viewBackupProgress() string {
 	var b strings.Builder
 
-	b.WriteString(titleStyle.Render("⬆ Backup"))
+	b.WriteString(sectionHeader("⬆", "Backup"))
 	b.WriteString("\n\n")
 
 	// Show backup conflict warning if detected
 	if len(m.backupConflicts) > 0 && !m.backupConfirmed {
-		b.WriteString(errorStyle.Render("⚠ Remote repo was updated by another device!"))
+		b.WriteString(errorStyle.Render("⚠  CONFLICT DETECTED"))
 		b.WriteString("\n\n")
-		b.WriteString(normalStyle.Render("The following entries have newer versions in the repo:"))
+		b.WriteString(normalStyle.Render("Remote repo was updated by another device:"))
 		b.WriteString("\n\n")
 		for _, path := range m.backupConflicts {
-			b.WriteString(warningStyle.Render("  • " + path))
+			b.WriteString(warningStyle.Render("  ⚡ " + path))
 			b.WriteString("\n")
 		}
 		b.WriteString("\n")
-		b.WriteString(normalStyle.Render("Backing up will overwrite the remote versions."))
-		b.WriteString("\n\n")
-		b.WriteString(warningStyle.Render("Press y to continue backup, or esc to cancel"))
+		b.WriteString(dimStyle.Render("Backing up will overwrite the remote versions."))
+		b.WriteString(statusBar("y continue • esc cancel"))
 		return boxStyle.Render(b.String())
 	}
 
 	if len(m.progressItems) == 0 && !m.progressDone {
-		b.WriteString("Syncing repository...")
+		b.WriteString(lipgloss.NewStyle().Foreground(accentColor).Render("⟳ "))
+		b.WriteString(normalStyle.Render("Syncing repository..."))
 		if m.errMsg != "" {
 			b.WriteString("\n\n")
 			b.WriteString(errorStyle.Render("✗ " + m.errMsg))
 		}
 	} else {
 		for _, item := range m.progressItems {
-			status := "  "
+			var status string
 			if item.done {
 				if item.err != nil {
 					status = errorStyle.Render("✗")
@@ -258,11 +259,12 @@ func (m Model) viewBackupProgress() string {
 					status = successStyle.Render("✓")
 				}
 			} else {
-				status = "⋯"
+				status = lipgloss.NewStyle().Foreground(accentColor).Render("⟳")
 			}
 
-			bar := renderProgressBar(item.percent, 20)
-			line := fmt.Sprintf("%s %s %s", status, item.name, bar)
+			name := padRight(item.name, 20)
+			bar := renderGradientBar(item.percent, 20)
+			line := fmt.Sprintf(" %s  %s %s", status, name, bar)
 			b.WriteString(line)
 
 			if item.err != nil {
@@ -281,27 +283,11 @@ func (m Model) viewBackupProgress() string {
 		b.WriteString(errorStyle.Render("✗ " + m.errMsg))
 	}
 
-	b.WriteString("\n\n")
 	if m.progressDone {
-		b.WriteString(helpStyle.Render("enter/esc back to menu"))
+		b.WriteString(statusBar("enter/esc back to menu"))
 	} else {
-		b.WriteString(helpStyle.Render("backing up..."))
+		b.WriteString(statusBar("backing up..."))
 	}
 
 	return boxStyle.Render(b.String())
-}
-
-func renderProgressBar(percent float64, width int) string {
-	if percent < 0 {
-		percent = 0
-	}
-	if percent > 1 {
-		percent = 1
-	}
-
-	filled := int(percent * float64(width))
-	empty := width - filled
-
-	bar := strings.Repeat("█", filled) + strings.Repeat("░", empty)
-	return helpStyle.Render("[") + bar + helpStyle.Render("]")
 }

@@ -1,9 +1,11 @@
 package ui
 
 import (
+	"fmt"
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 )
 
 func (m Model) updateMainMenu(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -76,38 +78,47 @@ func (m Model) updateMainMenu(msg tea.Msg) (tea.Model, tea.Cmd) {
 func (m Model) viewMainMenu() string {
 	var b strings.Builder
 
-	b.WriteString(titleStyle.Render("📁 DFC — Dot File Commander"))
-	b.WriteString("\n\n")
+	b.WriteString(logo())
+	b.WriteString("\n")
 
 	for i, item := range m.menuItems {
 		icon := menuIcons[i]
 		if i == m.menuCursor {
-			b.WriteString(selectedStyle.Render("▸ " + icon + " " + item))
+			b.WriteString(menuSelectedStyle.Render("▸ " + icon + "  " + item))
+			b.WriteString("\n")
+			if i < len(menuDescriptions) {
+				b.WriteString(menuDescStyle.Render(menuDescriptions[i]))
+			}
 		} else {
-			b.WriteString(normalStyle.Render("  " + icon + " " + item))
+			b.WriteString(menuItemStyle.Render("  " + icon + "  " + dimStyle.Render(item)))
 		}
 		b.WriteString("\n")
 	}
 
 	b.WriteString("\n")
+	b.WriteString(divider(38))
+	b.WriteString("\n")
 
 	// Show tracked entries count and repo info
 	entryCount := len(m.cfg.Entries)
 	if entryCount > 0 {
-		info := []string{
-			pluralize(entryCount, "entry", "entries") + " tracked",
-			"repo: " + m.cfg.RepoURL,
-		}
+		b.WriteString(dimStyle.Render("  📊 "))
+		b.WriteString(helpStyle.Render(pluralize(entryCount, "entry", "entries") + " tracked"))
+		b.WriteString("\n")
+		b.WriteString(dimStyle.Render("  🔗 "))
+		b.WriteString(helpStyle.Render(m.cfg.RepoURL))
+		b.WriteString("\n")
 		if m.cfg.DeviceProfile != "" {
-			info = append(info, "profile: "+m.cfg.DeviceProfile)
+			b.WriteString(dimStyle.Render("  👤 "))
+			b.WriteString(lipgloss.NewStyle().Foreground(accentColor).Render(m.cfg.DeviceProfile))
+			b.WriteString("\n")
 		}
-		b.WriteString(helpStyle.Render(strings.Join(info, " • ")))
 	} else {
-		b.WriteString(helpStyle.Render("No entries tracked yet — add some via Manage Entries"))
+		b.WriteString(helpStyle.Render("  No entries tracked yet — start with Manage Entries"))
+		b.WriteString("\n")
 	}
 
-	b.WriteString("\n\n")
-	b.WriteString(helpStyle.Render("↑/↓ select • enter confirm • q quit"))
+	b.WriteString(statusBar("↑/↓ navigate • enter select • q quit"))
 
 	return boxStyle.Render(b.String())
 }
@@ -131,5 +142,5 @@ func pluralize(n int, singular, plural string) string {
 	if n == 1 {
 		return "1 " + singular
 	}
-	return strings.Replace(strings.Replace("N "+plural, "N", string(rune('0'+n%10)), 1), "N", "", -1)
+	return fmt.Sprintf("%d %s", n, plural)
 }

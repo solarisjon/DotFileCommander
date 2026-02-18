@@ -172,7 +172,7 @@ func pluralize2(n int) string {
 func (m Model) viewConfigBrowser() string {
 	var b strings.Builder
 
-	b.WriteString(titleStyle.Render("📂 Browse ~/.config"))
+	b.WriteString(sectionHeader("📂", "Browse ~/.config"))
 	b.WriteString("\n\n")
 
 	if m.browserStep == browserStepTags {

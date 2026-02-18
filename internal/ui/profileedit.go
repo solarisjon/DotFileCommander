@@ -43,7 +43,7 @@ func (m Model) updateProfileEdit(msg tea.Msg) (tea.Model, tea.Cmd) {
 func (m Model) viewProfileEdit() string {
 	var b strings.Builder
 
-	b.WriteString(titleStyle.Render("👤 Device Profile"))
+	b.WriteString(sectionHeader("👤", "Device Profile"))
 	b.WriteString("\n\n")
 	b.WriteString("Set a name for this device to support per-machine configurations.\n")
 	b.WriteString("Profile-specific entries will be stored separately for each profile.\n\n")
@@ -63,8 +63,7 @@ func (m Model) viewProfileEdit() string {
 		b.WriteString(errorStyle.Render("✗ " + m.errMsg))
 	}
 
-	b.WriteString("\n\n")
-	b.WriteString(helpStyle.Render("enter save • esc cancel"))
+	b.WriteString(statusBar("enter save • esc cancel"))
 
 	return boxStyle.Render(b.String())
 }

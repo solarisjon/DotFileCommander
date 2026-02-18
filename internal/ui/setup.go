@@ -189,7 +189,7 @@ func (m Model) cloneRepo() tea.Cmd {
 func (m Model) viewSetup() string {
 	var b strings.Builder
 
-	b.WriteString(titleStyle.Render("🔧 DFC Setup"))
+	b.WriteString(sectionHeader("🔧", "DFC Setup"))
 	b.WriteString("\n\n")
 	b.WriteString("DFC backs up your dotfiles to a GitHub repository so you can\n")
 	b.WriteString("keep your configurations in sync across multiple machines.\n\n")
