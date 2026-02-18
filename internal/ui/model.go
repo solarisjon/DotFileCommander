@@ -63,10 +63,12 @@ type Model struct {
 	ghStatus     gsync.GhStatus
 
 	// Backup/Restore progress
-	progressItems []progressItem
-	progressDone  bool
-	statusMsg     string
-	backupCh      <-chan backup.Progress
+	progressItems    []progressItem
+	progressDone     bool
+	statusMsg        string
+	backupCh         <-chan backup.Progress
+	backupConflicts  []string // entry paths that were updated remotely
+	backupConfirmed  bool
 
 	// Restore selection
 	restoreStep      int // restoreStep* constants

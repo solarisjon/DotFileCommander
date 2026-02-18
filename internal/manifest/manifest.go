@@ -62,8 +62,14 @@ func (m *Manifest) Save(repoPath string) error {
 }
 
 // BumpVersion increments the version for an entry path and records the timestamp and hash.
-func (m *Manifest) BumpVersion(entryPath string, contentHash string) {
+// If the content hash is identical to the existing one, the version is not bumped.
+// Returns true if the version was actually bumped.
+func (m *Manifest) BumpVersion(entryPath string, contentHash string) bool {
 	ev := m.Entries[entryPath]
+	// Skip bump if content hasn't changed
+	if ev.ContentHash != "" && ev.ContentHash == contentHash {
+		return false
+	}
 	ev.Version++
 	ev.UpdatedAt = time.Now()
 	ev.ContentHash = contentHash
@@ -71,6 +77,7 @@ func (m *Manifest) BumpVersion(entryPath string, contentHash string) {
 		ev.UpdatedBy = host
 	}
 	m.Entries[entryPath] = ev
+	return true
 }
 
 // GetVersion returns the repo version for an entry path (0 if never backed up).

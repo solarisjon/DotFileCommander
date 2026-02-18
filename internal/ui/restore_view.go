@@ -306,7 +306,9 @@ func (m Model) updateRestoreEntries(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		for _, item := range m.restoreEntries {
 			if item.selected {
 				count++
-				if item.conflict == restore.StateModifiedLocal || item.conflict == restore.StateConflict {
+				if item.conflict == restore.StateModifiedLocal ||
+					item.conflict == restore.StateConflict ||
+					item.conflict == restore.StateNewerInRepo {
 					hasConflicts = true
 				}
 			}
@@ -315,10 +317,10 @@ func (m Model) updateRestoreEntries(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.errMsg = "No entries selected"
 			return m, nil
 		}
-		// If there are conflicts and we haven't confirmed, show warning
+		// If there are entries that will change local files, confirm
 		if hasConflicts && !m.restoreConfirmed {
 			m.restoreConfirmed = true
-			m.errMsg = "⚠ Some entries modified locally! Press enter again to force, or deselect them first."
+			m.errMsg = "⚠ Some local files will be overwritten! Press enter again to confirm, or deselect them."
 			return m, nil
 		}
 		m.errMsg = ""
@@ -529,10 +531,12 @@ func (m Model) viewRestoreEntries() string {
 
 		// Add conflict state indicator
 		switch item.conflict {
+		case restore.StateNewerInRepo:
+			verInfo += " " + warningStyle.Render("⬇ will overwrite local")
 		case restore.StateModifiedLocal:
 			verInfo += " " + warningStyle.Render("⚠ modified locally")
 		case restore.StateConflict:
-			verInfo += " " + errorStyle.Render("⚡ conflict")
+			verInfo += " " + errorStyle.Render("⚡ conflict — both changed")
 		}
 
 		rlines[idx] = rl{left: left, leftWidth: leftWidth, ver: verInfo}

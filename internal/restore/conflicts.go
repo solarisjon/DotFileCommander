@@ -56,28 +56,46 @@ func CheckConflicts(entries []config.Entry, mf *manifest.Manifest) []ConflictRes
 		// Compute current local hash
 		localHash, err := hash.HashEntry(e)
 		if err != nil {
-			// Can't hash local (file missing, etc) — treat as unknown
-			cr.State = StateUnknown
+			// Can't hash local (file missing, etc) — safe to restore
+			cr.State = StateClean
 			results[i] = cr
 			continue
 		}
 		cr.LocalHash = localHash
 
-		// No prior hash recorded — first time, can't detect changes
+		repoNewer := mv.Version > e.LocalVersion
+
+		// No prior hash recorded — if local file exists and differs from
+		// what's in the repo, treat as a conflict to avoid silent overwrite.
 		if e.LastHash == "" {
-			cr.State = StateUnknown
+			if cr.RepoHash != "" && localHash != cr.RepoHash {
+				// Local file differs from repo content — warn user
+				if repoNewer {
+					cr.State = StateConflict
+				} else {
+					cr.State = StateModifiedLocal
+				}
+			} else {
+				cr.State = StateClean
+			}
 			results[i] = cr
 			continue
 		}
 
 		localModified := localHash != e.LastHash
-		repoNewer := mv.Version > e.LocalVersion
 
 		switch {
 		case !localModified && !repoNewer:
 			cr.State = StateClean
 		case !localModified && repoNewer:
-			cr.State = StateNewerInRepo
+			// Repo is newer but local unchanged — still check if the actual
+			// content differs so user knows their file will change.
+			if cr.RepoHash != "" && localHash != cr.RepoHash {
+				cr.State = StateNewerInRepo
+			} else {
+				// Repo version bumped but content is identical — safe
+				cr.State = StateClean
+			}
 		case localModified && !repoNewer:
 			cr.State = StateModifiedLocal
 		case localModified && repoNewer:
