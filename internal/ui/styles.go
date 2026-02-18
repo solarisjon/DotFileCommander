@@ -50,12 +50,6 @@ var (
 	normalStyle = lipgloss.NewStyle().
 			Foreground(textColor)
 
-	// Tag pill
-	tagStyle = lipgloss.NewStyle().
-			Foreground(brightWhite).
-			Background(primaryColor).
-			Padding(0, 1)
-
 	warningStyle = lipgloss.NewStyle().
 		Foreground(warningColor)
 

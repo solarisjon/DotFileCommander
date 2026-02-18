@@ -23,29 +23,6 @@ type Progress struct {
 	BytesTotal  int64
 }
 
-// FilterByTags returns entries that have at least one matching tag.
-// If tags is empty, all entries are returned.
-func FilterByTags(entries []config.Entry, tags []string) []config.Entry {
-	if len(tags) == 0 {
-		return entries
-	}
-	tagSet := make(map[string]bool)
-	for _, t := range tags {
-		tagSet[strings.ToLower(t)] = true
-	}
-
-	var filtered []config.Entry
-	for _, e := range entries {
-		for _, t := range e.Tags {
-			if tagSet[strings.ToLower(t)] {
-				filtered = append(filtered, e)
-				break
-			}
-		}
-	}
-	return filtered
-}
-
 // Run restores entries from the repo to the filesystem.
 // The profile parameter determines where profile-specific entries are read from.
 func Run(entries []config.Entry, repoPath string, profile string) <-chan Progress {

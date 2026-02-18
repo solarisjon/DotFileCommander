@@ -36,8 +36,6 @@ func (m Model) updateRemoteView(msg tea.Msg) (tea.Model, tea.Cmd) {
 type remoteEntry struct {
 	name            string
 	path            string
-	tags            string
-	tagsPlain       int
 	repoVer         int
 	localVer        int
 	updatedBy       string
@@ -86,10 +84,6 @@ func (m *Model) loadRemoteData() {
 		}
 		if re.name == "" {
 			re.name = entry.FriendlyName(e.Path)
-		}
-		if len(e.Tags) > 0 {
-			re.tags = strings.Join(e.Tags, ", ")
-			re.tagsPlain = len(re.tags)
 		}
 		if e.ProfileSpecific {
 			re.profileSpecific = true

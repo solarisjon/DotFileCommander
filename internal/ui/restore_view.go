@@ -20,15 +20,9 @@ type restoreProgressMsg restore.Progress
 type restoreSyncDoneMsg struct{ err error }
 
 const (
-	restoreStepTags    = 0 // pick tags to filter by
-	restoreStepEntries = 1 // select entries to restore
-	restoreStepRunning = 2 // progress view
+	restoreStepEntries = 0 // select entries to restore
+	restoreStepRunning = 1 // progress view
 )
-
-type restoreTagItem struct {
-	tag      string
-	selected bool
-}
 
 type restoreEntryItem struct {
 	entry    config.Entry
@@ -38,7 +32,6 @@ type restoreEntryItem struct {
 }
 
 func (m *Model) initRestoreView() {
-	m.restoreStep = restoreStepTags
 	m.restoreCursor = 0
 	m.progressDone = false
 	m.errMsg = ""
@@ -49,41 +42,11 @@ func (m *Model) initRestoreView() {
 	// Load manifest to check versions
 	m.restoreManifest, _ = manifest.Load(m.cfg.RepoPath)
 
-	// Collect unique tags
-	tagSet := make(map[string]bool)
-	for _, e := range m.cfg.Entries {
-		for _, t := range e.Tags {
-			tagSet[t] = true
-		}
-	}
-	m.restoreTags = nil
-	for t := range tagSet {
-		m.restoreTags = append(m.restoreTags, restoreTagItem{tag: t, selected: false})
-	}
-	m.restoreAllTags = true // default: all entries
-
-	// Pre-populate entry list with all entries
 	m.buildRestoreEntries()
 }
 
 func (m *Model) buildRestoreEntries() {
-	// Get selected tags
-	var selectedTags []string
-	if !m.restoreAllTags {
-		for _, t := range m.restoreTags {
-			if t.selected {
-				selectedTags = append(selectedTags, t.tag)
-			}
-		}
-	}
-
-	// Filter entries
-	var filtered []config.Entry
-	if m.restoreAllTags || len(selectedTags) == 0 {
-		filtered = m.cfg.Entries
-	} else {
-		filtered = restore.FilterByTags(m.cfg.Entries, selectedTags)
-	}
+	filtered := m.cfg.Entries
 
 	// Check conflicts
 	var conflicts []restore.ConflictResult
@@ -96,7 +59,7 @@ func (m *Model) buildRestoreEntries() {
 		item := restoreEntryItem{
 			entry:    e,
 			idx:      i,
-			selected: true, // default all selected
+			selected: true,
 		}
 		if conflicts != nil {
 			item.conflict = conflicts[i].State
@@ -182,7 +145,6 @@ func (m Model) handleRestoreProgress(msg restoreProgressMsg) (tea.Model, tea.Cmd
 		// Update local versions and hashes from manifest for successfully restored entries
 		mf, err := manifest.Load(m.cfg.RepoPath)
 		if err == nil {
-			// Build list of restored entries to match progress items
 			var restored []config.Entry
 			for _, item := range m.restoreEntries {
 				if item.selected {
@@ -191,12 +153,10 @@ func (m Model) handleRestoreProgress(msg restoreProgressMsg) (tea.Model, tea.Cmd
 			}
 			for i, item := range m.progressItems {
 				if item.done && item.err == nil && i < len(restored) {
-					// Find this entry in cfg and update its local version + hash
 					for j := range m.cfg.Entries {
 						if m.cfg.Entries[j].Path == restored[i].Path {
 							mkey := storage.ManifestKey(m.cfg.Entries[j], m.cfg.DeviceProfile)
 							m.cfg.Entries[j].LocalVersion = mf.GetVersion(mkey)
-							// Hash the restored content so future modifications can be detected
 							m.cfg.Entries[j].LastHash = mf.Entries[mkey].ContentHash
 							break
 						}
@@ -220,8 +180,6 @@ func (m Model) updateRestoreView(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
 		switch m.restoreStep {
-		case restoreStepTags:
-			return m.updateRestoreTags(msg)
 		case restoreStepEntries:
 			return m.updateRestoreEntries(msg)
 		case restoreStepRunning:
@@ -229,53 +187,6 @@ func (m Model) updateRestoreView(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 	case restoreSyncDoneMsg:
 		return m.handleRestoreSyncDone(msg)
-	}
-	return m, nil
-}
-
-func (m Model) updateRestoreTags(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
-	switch msg.String() {
-	case "up", "k":
-		if m.restoreCursor > 0 {
-			m.restoreCursor--
-		}
-	case "down", "j":
-		max := len(m.restoreTags) // "All" is index 0 conceptually, tags follow
-		if m.restoreCursor < max {
-			m.restoreCursor++
-		}
-	case " ":
-		if m.restoreCursor == 0 {
-			// Toggle "All"
-			m.restoreAllTags = !m.restoreAllTags
-			if m.restoreAllTags {
-				for i := range m.restoreTags {
-					m.restoreTags[i].selected = false
-				}
-			}
-		} else {
-			idx := m.restoreCursor - 1
-			if idx < len(m.restoreTags) {
-				m.restoreTags[idx].selected = !m.restoreTags[idx].selected
-				// If any tag is toggled, deselect "All"
-				anySelected := false
-				for _, t := range m.restoreTags {
-					if t.selected {
-						anySelected = true
-						break
-					}
-				}
-				m.restoreAllTags = !anySelected
-			}
-		}
-		m.buildRestoreEntries()
-	case "enter":
-		m.restoreStep = restoreStepEntries
-		m.restoreCursor = 0
-		return m, nil
-	case "esc", "q":
-		m.currentView = viewMainMenu
-		return m, nil
 	}
 	return m, nil
 }
@@ -303,7 +214,6 @@ func (m Model) updateRestoreEntries(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.restoreEntries[i].selected = false
 		}
 	case "enter":
-		// Count selected
 		count := 0
 		hasConflicts := false
 		for _, item := range m.restoreEntries {
@@ -320,7 +230,6 @@ func (m Model) updateRestoreEntries(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.errMsg = "No entries selected"
 			return m, nil
 		}
-		// If there are entries that will change local files, confirm
 		if hasConflicts && !m.restoreConfirmed {
 			m.restoreConfirmed = true
 			m.errMsg = "⚠ Some local files will be overwritten! Press enter again to confirm, or deselect them."
@@ -330,13 +239,11 @@ func (m Model) updateRestoreEntries(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.restoreConfirmed = false
 		m.restoreStep = restoreStepRunning
 		return m, m.startRestore()
-	case "esc":
+	case "esc", "q":
 		m.restoreConfirmed = false
-		m.restoreStep = restoreStepTags
-		m.restoreCursor = 0
+		m.currentView = viewMainMenu
 		return m, nil
 	}
-	// Reset confirmation if user changes selection
 	m.restoreConfirmed = false
 	m.errMsg = ""
 	return m, nil
@@ -358,68 +265,12 @@ func (m Model) updateRestoreRunning(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 func (m Model) viewRestoreProgress() string {
 	switch m.restoreStep {
-	case restoreStepTags:
-		return m.viewRestoreTags()
 	case restoreStepEntries:
 		return m.viewRestoreEntries()
 	case restoreStepRunning:
 		return m.viewRestoreRunning()
 	}
 	return ""
-}
-
-func (m Model) viewRestoreTags() string {
-	var b strings.Builder
-
-	b.WriteString(sectionHeader("⬇", "Restore — Filter by Tags"))
-	b.WriteString("\n\n")
-
-	if len(m.restoreTags) == 0 {
-		b.WriteString(helpStyle.Render("No tags found. All entries will be shown."))
-		b.WriteString("\n\n")
-		b.WriteString(helpStyle.Render("enter continue • esc cancel"))
-		return boxStyle.Render(b.String())
-	}
-
-	b.WriteString(normalStyle.Render("Select which tags to restore:"))
-	b.WriteString("\n\n")
-
-	// "All" option
-	allCheck := "( )"
-	if m.restoreAllTags {
-		allCheck = selectedStyle.Render("(•)")
-	}
-	allLine := fmt.Sprintf("%s All entries", allCheck)
-	if m.restoreCursor == 0 {
-		b.WriteString(selectedStyle.Render("▸ " + allLine))
-	} else {
-		b.WriteString("  " + allLine)
-	}
-	b.WriteString("\n")
-
-	// Individual tags
-	for i, t := range m.restoreTags {
-		check := "[ ]"
-		if t.selected {
-			check = selectedStyle.Render("[✓]")
-		}
-		line := fmt.Sprintf("%s %s", check, tagStyle.Render(t.tag))
-
-		if i+1 == m.restoreCursor {
-			b.WriteString(selectedStyle.Render("▸ ") + line)
-		} else {
-			b.WriteString("  " + line)
-		}
-		b.WriteString("\n")
-	}
-
-	// Show match count
-	b.WriteString("\n")
-	b.WriteString(helpStyle.Render(fmt.Sprintf("%d %s will be shown", len(m.restoreEntries), pluralize2(len(m.restoreEntries)))))
-	b.WriteString("\n\n")
-	b.WriteString(helpStyle.Render("space toggle • enter continue • esc cancel"))
-
-	return boxStyle.Render(b.String())
 }
 
 func (m Model) viewRestoreEntries() string {
@@ -429,9 +280,9 @@ func (m Model) viewRestoreEntries() string {
 	b.WriteString("\n\n")
 
 	if len(m.restoreEntries) == 0 {
-		b.WriteString(helpStyle.Render("No entries match the selected tags."))
+		b.WriteString(helpStyle.Render("No entries to restore."))
 		b.WriteString("\n\n")
-		b.WriteString(helpStyle.Render("esc back"))
+		b.WriteString(statusBar("esc back"))
 		return boxStyle.Render(b.String())
 	}
 
@@ -500,24 +351,18 @@ func (m Model) viewRestoreEntries() string {
 		if item.entry.IsDir {
 			icon = "📁"
 		}
-
-		tags := ""
-		tagsPlain := 0
-		if len(item.entry.Tags) > 0 {
-			pills := make([]string, len(item.entry.Tags))
-			for j, t := range item.entry.Tags {
-				pills[j] = tagStyle.Render(t)
-				tagsPlain += len(t) + 2
-			}
-			tags = strings.Join(pills, " ")
-			tagsPlain += len(item.entry.Tags) - 1
+		if item.entry.ProfileSpecific {
+			icon += "👤"
 		}
 
 		nameCol := padRight(name, maxName+2)
 
-		left := fmt.Sprintf("%s %s %s %s", check, icon, nameCol, tags)
-		// plain: [✓](3) + space + icon(2) + space + name + space + tags
-		leftWidth := 3 + 1 + 2 + 1 + (maxName + 2) + 1 + tagsPlain
+		left := fmt.Sprintf("%s %s %s", check, icon, nameCol)
+		iconWidth := 2
+		if item.entry.ProfileSpecific {
+			iconWidth = 4
+		}
+		leftWidth := 3 + 1 + iconWidth + 1 + (maxName + 2)
 
 		verInfo := ""
 		if m.restoreManifest != nil {
@@ -579,7 +424,7 @@ func (m Model) viewRestoreEntries() string {
 	b.WriteString("\n")
 	b.WriteString(helpStyle.Render(fmt.Sprintf("%d/%d selected", selCount, len(m.restoreEntries))))
 	b.WriteString("\n\n")
-	b.WriteString(helpStyle.Render("space toggle • a all • n none • enter restore • esc back"))
+	b.WriteString(statusBar("space toggle • a all • n none • enter restore • esc back"))
 
 	return boxStyle.Render(b.String())
 }

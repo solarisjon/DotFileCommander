@@ -28,7 +28,6 @@ func (m Model) updateEntryList(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.addStep = 0
 			m.addInput.SetValue("")
 			m.addNameInput.SetValue("")
-			m.addTagInput.SetValue("")
 			m.addProfileSpecific = false
 			m.addInput.Focus()
 			return m, m.addInput.Focus()
@@ -40,24 +39,12 @@ func (m Model) updateEntryList(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.entryCursor--
 				}
 			}
-		case "t":
-			// Edit tags
-			if len(m.cfg.Entries) > 0 && m.entryCursor < len(m.cfg.Entries) {
-				m.tagEditIdx = m.entryCursor
-				e := m.cfg.Entries[m.entryCursor]
-				m.tagInput.SetValue(strings.Join(e.Tags, ", "))
-				m.tagInput.Focus()
-				m.currentView = viewTagEdit
-				return m, m.tagInput.Focus()
-			}
 		case "b":
 			// Browse ~/.config
-			m.browserStep = 0
 			m.browserCursor = 0
-			m.browserTagInput.SetValue("")
-			m.browserTagInput.Focus()
 			m.currentView = viewConfigBrowser
-			return m, m.browserTagInput.Focus()
+			m.initBrowserDirs()
+			return m, nil
 		case "p":
 			// Toggle profile-specific
 			if len(m.cfg.Entries) > 0 && m.entryCursor < len(m.cfg.Entries) {
@@ -123,24 +110,16 @@ func (m Model) viewEntryList() string {
 				icon += "👤"
 			}
 
-			tags := ""
-			tagsPlain := 0
-			if len(e.Tags) > 0 {
-				tagPills := make([]string, len(e.Tags))
-				for j, t := range e.Tags {
-					tagPills[j] = tagStyle.Render(t)
-					tagsPlain += len(t) + 2 // pill padding
-				}
-				tags = strings.Join(tagPills, " ")
-				tagsPlain += len(e.Tags) - 1 // spaces between pills
-			}
-
 			nameCol := padRight(name, maxName+2)
 			pathCol := padRight(e.Path, maxPath+2)
 
-			left := fmt.Sprintf("%s %s %s %s", icon, nameCol, helpStyle.Render(pathCol), tags)
-			// plain width: icon(2) + space + name + space + path + space + tags
-			leftWidth := 2 + 1 + (maxName + 2) + 1 + (maxPath + 2) + 1 + tagsPlain
+			left := fmt.Sprintf("%s %s %s", icon, nameCol, helpStyle.Render(pathCol))
+			// plain width: icon(2+2 if profile) + space + name + space + path
+			iconWidth := 2
+			if e.ProfileSpecific {
+				iconWidth = 4
+			}
+			leftWidth := iconWidth + 1 + (maxName + 2) + 1 + (maxPath + 2)
 
 			verInfo := ""
 			if mf != nil {
@@ -179,7 +158,7 @@ func (m Model) viewEntryList() string {
 		b.WriteString("\n")
 	}
 
-	b.WriteString(statusBar("a add • b browse • d delete • t tags • p profile • esc back"))
+	b.WriteString(statusBar("a add • b browse • d delete • p profile • esc back"))
 
 	return boxStyle.Render(b.String())
 }

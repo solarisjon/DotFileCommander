@@ -17,11 +17,6 @@ type browserItem struct {
 	tracked  bool // already in config entries
 }
 
-const (
-	browserStepTags   = 0 // ask for tags first
-	browserStepSelect = 1 // then pick directories
-)
-
 func (m *Model) initBrowserDirs() {
 	dirs, err := entry.ListConfigDirs()
 	if err != nil {
@@ -51,89 +46,40 @@ func (m *Model) initBrowserDirs() {
 func (m Model) updateConfigBrowser(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
-		if m.browserStep == browserStepTags {
-			return m.updateBrowserTags(msg)
-		}
-		return m.updateBrowserSelect(msg)
-	}
-
-	// Pass through to text input in tag step
-	if m.browserStep == browserStepTags {
-		var cmd tea.Cmd
-		m.browserTagInput, cmd = m.browserTagInput.Update(msg)
-		return m, cmd
-	}
-
-	return m, nil
-}
-
-func (m Model) updateBrowserTags(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
-	switch msg.String() {
-	case "enter":
-		// Move to selection step
-		m.browserStep = browserStepSelect
-		m.browserCursor = 0
-		m.initBrowserDirs()
-		return m, nil
-	case "esc":
-		m.currentView = viewEntryList
-		return m, nil
-	}
-
-	var cmd tea.Cmd
-	m.browserTagInput, cmd = m.browserTagInput.Update(msg)
-	return m, cmd
-}
-
-func (m Model) updateBrowserSelect(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
-	switch msg.String() {
-	case "up", "k":
-		if m.browserCursor > 0 {
-			m.browserCursor--
-		}
-	case "down", "j":
-		if m.browserCursor < len(m.browserDirs)-1 {
-			m.browserCursor++
-		}
-	case " ":
-		// Toggle current item
-		if m.browserCursor < len(m.browserDirs) && !m.browserDirs[m.browserCursor].tracked {
-			m.browserDirs[m.browserCursor].selected = !m.browserDirs[m.browserCursor].selected
-		}
-	case "a":
-		// Select all (untracked)
-		for i := range m.browserDirs {
-			if !m.browserDirs[i].tracked {
-				m.browserDirs[i].selected = true
+		switch msg.String() {
+		case "up", "k":
+			if m.browserCursor > 0 {
+				m.browserCursor--
 			}
+		case "down", "j":
+			if m.browserCursor < len(m.browserDirs)-1 {
+				m.browserCursor++
+			}
+		case " ":
+			if m.browserCursor < len(m.browserDirs) && !m.browserDirs[m.browserCursor].tracked {
+				m.browserDirs[m.browserCursor].selected = !m.browserDirs[m.browserCursor].selected
+			}
+		case "a":
+			for i := range m.browserDirs {
+				if !m.browserDirs[i].tracked {
+					m.browserDirs[i].selected = true
+				}
+			}
+		case "n":
+			for i := range m.browserDirs {
+				m.browserDirs[i].selected = false
+			}
+		case "enter":
+			return m.commitBrowserSelection()
+		case "esc", "q":
+			m.currentView = viewEntryList
+			return m, nil
 		}
-	case "n":
-		// Select none
-		for i := range m.browserDirs {
-			m.browserDirs[i].selected = false
-		}
-	case "enter":
-		return m.commitBrowserSelection()
-	case "esc", "q":
-		m.currentView = viewEntryList
-		return m, nil
 	}
 	return m, nil
 }
 
 func (m Model) commitBrowserSelection() (tea.Model, tea.Cmd) {
-	// Parse tags from input
-	tagStr := m.browserTagInput.Value()
-	var tags []string
-	if strings.TrimSpace(tagStr) != "" {
-		for _, t := range strings.Split(tagStr, ",") {
-			t = strings.TrimSpace(t)
-			if t != "" {
-				tags = append(tags, t)
-			}
-		}
-	}
-
 	added := 0
 	for _, item := range m.browserDirs {
 		if !item.selected || item.tracked {
@@ -143,7 +89,6 @@ func (m Model) commitBrowserSelection() (tea.Model, tea.Cmd) {
 		e := config.Entry{
 			Path:  path,
 			Name:  item.friendly,
-			Tags:  tags,
 			IsDir: true,
 		}
 		if err := m.cfg.AddEntry(e); err != nil {
@@ -175,37 +120,11 @@ func (m Model) viewConfigBrowser() string {
 	b.WriteString(sectionHeader("📂", "Browse ~/.config"))
 	b.WriteString("\n\n")
 
-	if m.browserStep == browserStepTags {
-		b.WriteString(normalStyle.Render("Tags to apply to all selected entries:"))
-		b.WriteString("\n\n")
-		b.WriteString(m.browserTagInput.View())
-		b.WriteString("\n\n")
-		b.WriteString(helpStyle.Render("Comma-separated, e.g. home, work, laptop"))
-		b.WriteString("\n")
-		b.WriteString(helpStyle.Render("Leave blank for no tags"))
-		b.WriteString("\n\n")
-		b.WriteString(helpStyle.Render("enter continue • esc cancel"))
-		return boxStyle.Render(b.String())
-	}
-
 	if len(m.browserDirs) == 0 {
 		b.WriteString(helpStyle.Render("No directories found in ~/.config"))
 		b.WriteString("\n\n")
-		b.WriteString(helpStyle.Render("esc back"))
+		b.WriteString(statusBar("esc back"))
 		return boxStyle.Render(b.String())
-	}
-
-	// Show tag summary
-	tagStr := m.browserTagInput.Value()
-	if strings.TrimSpace(tagStr) != "" {
-		b.WriteString(helpStyle.Render("Tags: "))
-		for _, t := range strings.Split(tagStr, ",") {
-			t = strings.TrimSpace(t)
-			if t != "" {
-				b.WriteString(tagStyle.Render(t) + " ")
-			}
-		}
-		b.WriteString("\n\n")
 	}
 
 	// Count selected

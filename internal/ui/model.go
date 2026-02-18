@@ -17,7 +17,6 @@ const (
 	viewMainMenu
 	viewEntryList
 	viewAddEntry
-	viewTagEdit
 	viewBackup
 	viewRestore
 	viewConfigBrowser
@@ -42,20 +41,13 @@ type Model struct {
 
 	// Add entry
 	addInput     textinput.Model
-	addStep      int // 0=path, 1=name, 2=tags
+	addStep      int // 0=path, 1=name, 2=profile-specific
 	addNameInput textinput.Model
-	addTagInput  textinput.Model
 	addIsDir     bool
 
-	// Tag edit
-	tagEditIdx   int
-	tagInput     textinput.Model
-
 	// Config browser
-	browserDirs     []browserItem
-	browserCursor   int
-	browserStep     int // 0=tags, 1=select
-	browserTagInput textinput.Model
+	browserDirs   []browserItem
+	browserCursor int
 
 	// Setup
 	setupInput   textinput.Model
@@ -72,10 +64,8 @@ type Model struct {
 	backupConfirmed  bool
 
 	// Restore selection
-	restoreStep      int // restoreStep* constants
+	restoreStep      int
 	restoreCursor    int
-	restoreTags      []restoreTagItem
-	restoreAllTags   bool
 	restoreEntries   []restoreEntryItem
 	restoreCh        <-chan restore.Progress
 	restoreManifest  *manifest.Manifest
@@ -127,21 +117,6 @@ func New(cfg *config.Config) Model {
 	nameTi.CharLimit = 100
 	nameTi.Width = 40
 
-	tagTi := textinput.New()
-	tagTi.Placeholder = "home, work"
-	tagTi.CharLimit = 200
-	tagTi.Width = 40
-
-	tagEditTi := textinput.New()
-	tagEditTi.Placeholder = "home, work"
-	tagEditTi.CharLimit = 200
-	tagEditTi.Width = 40
-
-	browserTagTi := textinput.New()
-	browserTagTi.Placeholder = "home, work, laptop"
-	browserTagTi.CharLimit = 200
-	browserTagTi.Width = 40
-
 	profileTi := textinput.New()
 	profileTi.Placeholder = "work"
 	profileTi.CharLimit = 50
@@ -171,9 +146,6 @@ func New(cfg *config.Config) Model {
 		setupInput:  ti,
 		addInput:    addTi,
 		addNameInput: nameTi,
-		addTagInput: tagTi,
-		tagInput:    tagEditTi,
-		browserTagInput: browserTagTi,
 		profileInput: profileTi,
 		ghStatus:    ghSt,
 		setupStep:   initialStep,
@@ -225,8 +197,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.updateEntryList(msg)
 	case viewAddEntry:
 		return m.updateAddEntry(msg)
-	case viewTagEdit:
-		return m.updateTagEdit(msg)
 	case viewBackup:
 		return m.updateBackupView(msg)
 	case viewRestore:
@@ -258,8 +228,6 @@ func (m Model) View() string {
 		return m.viewEntryList()
 	case viewAddEntry:
 		return m.viewAddEntry()
-	case viewTagEdit:
-		return m.viewTagEdit()
 	case viewBackup:
 		return m.viewBackupProgress()
 	case viewRestore:
