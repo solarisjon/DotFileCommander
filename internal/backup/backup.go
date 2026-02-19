@@ -23,6 +23,7 @@ type Progress struct {
 	BytesCopied int64
 	BytesTotal  int64
 	ContentHash string // SHA256 hash of the source after backup
+	Skipped     int    // number of files skipped due to errors
 }
 
 // Run backs up all entries into the repo working tree.
@@ -124,7 +125,9 @@ func copyDir(src, dst string, p *Progress) error {
 
 	return filepath.WalkDir(src, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
-			return err
+			// Skip files/dirs we can't access rather than aborting
+			p.Skipped++
+			return nil
 		}
 
 		// Skip .git directories
@@ -134,7 +137,8 @@ func copyDir(src, dst string, p *Progress) error {
 
 		rel, err := filepath.Rel(src, path)
 		if err != nil {
-			return err
+			p.Skipped++
+			return nil
 		}
 		target := filepath.Join(dst, rel)
 
@@ -142,14 +146,25 @@ func copyDir(src, dst string, p *Progress) error {
 		if d.Type()&fs.ModeSymlink != 0 {
 			linkTarget, err := os.Readlink(path)
 			if err != nil {
-				return err
+				p.Skipped++
+				return nil
 			}
 			if err := os.MkdirAll(filepath.Dir(target), 0755); err != nil {
-				return err
+				p.Skipped++
+				return nil
 			}
 			// Remove existing symlink/file at target before creating
 			os.Remove(target)
-			return os.Symlink(linkTarget, target)
+			if err := os.Symlink(linkTarget, target); err != nil {
+				p.Skipped++
+			}
+			return nil
+		}
+
+		// Skip special files (sockets, pipes, devices)
+		if !d.IsDir() && d.Type().IsRegular() == false {
+			p.Skipped++
+			return nil
 		}
 
 		if d.IsDir() {
@@ -158,29 +173,34 @@ func copyDir(src, dst string, p *Progress) error {
 
 		info, err := d.Info()
 		if err != nil {
-			return err
+			p.Skipped++
+			return nil
 		}
 
 		if err := os.MkdirAll(filepath.Dir(target), 0755); err != nil {
-			return err
+			p.Skipped++
+			return nil
 		}
 
 		in, err := os.Open(path)
 		if err != nil {
-			return err
+			p.Skipped++
+			return nil
 		}
 		defer in.Close()
 
 		out, err := os.Create(target)
 		if err != nil {
-			return err
+			p.Skipped++
+			return nil
 		}
 		defer out.Close()
 
 		n, err := io.Copy(out, in)
 		p.BytesCopied += n
 		if err != nil {
-			return err
+			p.Skipped++
+			return nil
 		}
 
 		return out.Chmod(info.Mode())

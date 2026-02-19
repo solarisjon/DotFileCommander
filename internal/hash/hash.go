@@ -38,13 +38,17 @@ func HashDir(path string) (string, error) {
 	var symlinks []string
 	err := filepath.WalkDir(path, func(p string, d fs.DirEntry, err error) error {
 		if err != nil {
-			return err
+			return nil // skip inaccessible files
 		}
 		if d.IsDir() && d.Name() == ".git" {
 			return filepath.SkipDir
 		}
 		if d.Type()&fs.ModeSymlink != 0 {
 			symlinks = append(symlinks, p)
+			return nil
+		}
+		// Skip special files (sockets, pipes, devices)
+		if !d.IsDir() && !d.Type().IsRegular() {
 			return nil
 		}
 		if !d.IsDir() {
@@ -63,18 +67,18 @@ func HashDir(path string) (string, error) {
 	for _, fp := range files {
 		rel, err := filepath.Rel(path, fp)
 		if err != nil {
-			return "", err
+			continue // skip files we can't resolve
 		}
 		// Include the relative path in the hash so renames are detected.
 		h.Write([]byte(rel))
 
 		f, err := os.Open(fp)
 		if err != nil {
-			return "", err
+			continue // skip unreadable files
 		}
 		if _, err := io.Copy(h, f); err != nil {
 			f.Close()
-			return "", err
+			continue // skip files that fail mid-read
 		}
 		f.Close()
 	}
@@ -83,12 +87,12 @@ func HashDir(path string) (string, error) {
 	for _, sp := range symlinks {
 		rel, err := filepath.Rel(path, sp)
 		if err != nil {
-			return "", err
+			continue
 		}
 		h.Write([]byte("symlink:" + rel))
 		linkTarget, err := os.Readlink(sp)
 		if err != nil {
-			return "", err
+			continue // skip broken symlinks
 		}
 		h.Write([]byte(linkTarget))
 	}
