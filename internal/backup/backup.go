@@ -24,6 +24,8 @@ type Progress struct {
 	BytesTotal  int64
 	ContentHash string // SHA256 hash of the source after backup
 	Skipped     int    // number of files skipped due to errors
+	Copied      int    // number of files successfully copied
+	Warning     string // human-readable warning if something noteworthy happened
 }
 
 // Run backs up all entries into the repo working tree.
@@ -56,6 +58,10 @@ func Run(entries []config.Entry, repoPath string, profile string) <-chan Progres
 			p.Done = true
 			p.Err = err
 			if err == nil {
+				// Generate warnings for entries with nothing useful to back up
+				if entry.IsDir && p.Copied == 0 && p.Skipped > 0 {
+					p.Warning = describeSkippedDir(srcPath)
+				}
 				// Compute hash of the source for state tracking
 				h, hashErr := hash.HashEntry(entry)
 				if hashErr == nil {
@@ -203,8 +209,43 @@ func copyDir(src, dst string, p *Progress) error {
 			return nil
 		}
 
+		p.Copied++
 		return out.Chmod(info.Mode())
 	})
+}
+
+// describeSkippedDir inspects a directory to explain why nothing was copied.
+func describeSkippedDir(dir string) string {
+	var symlinks, sockets, other int
+	_ = filepath.WalkDir(dir, func(path string, d fs.DirEntry, err error) error {
+		if err != nil || d.IsDir() {
+			return nil
+		}
+		if d.Type()&fs.ModeSymlink != 0 {
+			symlinks++
+		} else if d.Type()&fs.ModeSocket != 0 {
+			sockets++
+		} else if !d.Type().IsRegular() {
+			other++
+		}
+		return nil
+	})
+
+	parts := []string{}
+	if symlinks > 0 {
+		parts = append(parts, fmt.Sprintf("%d symlink(s)", symlinks))
+	}
+	if sockets > 0 {
+		parts = append(parts, fmt.Sprintf("%d socket(s)", sockets))
+	}
+	if other > 0 {
+		parts = append(parts, fmt.Sprintf("%d special file(s)", other))
+	}
+
+	if len(parts) == 0 {
+		return "no regular files found"
+	}
+	return "only contains " + strings.Join(parts, ", ") + " — nothing to back up"
 }
 
 func homeRelative(path string) string {

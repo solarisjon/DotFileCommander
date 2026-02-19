@@ -100,6 +100,7 @@ type progressItem struct {
 	percent     float64
 	contentHash string
 	skipped     int
+	warning     string
 }
 
 // New creates a new root model.
