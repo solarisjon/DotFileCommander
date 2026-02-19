@@ -280,6 +280,33 @@ func NukeRepo(localPath string) error {
 	return nil
 }
 
+// GitIdentity holds the user's git config name and email.
+type GitIdentity struct {
+	Name  string
+	Email string
+}
+
+// CheckGitIdentity reads git's global user.name and user.email.
+func CheckGitIdentity() GitIdentity {
+	name, _ := gitOutput("", "config", "--global", "user.name")
+	email, _ := gitOutput("", "config", "--global", "user.email")
+	return GitIdentity{
+		Name:  strings.TrimSpace(name),
+		Email: strings.TrimSpace(email),
+	}
+}
+
+// SetGitIdentity sets git's global user.name and user.email.
+func SetGitIdentity(name, email string) error {
+	if err := gitCmd("", "config", "--global", "user.name", name); err != nil {
+		return fmt.Errorf("setting user.name: %w", err)
+	}
+	if err := gitCmd("", "config", "--global", "user.email", email); err != nil {
+		return fmt.Errorf("setting user.email: %w", err)
+	}
+	return nil
+}
+
 func expandHome(path string) string {
 	if strings.HasPrefix(path, "~/") {
 		if home, err := os.UserHomeDir(); err == nil {

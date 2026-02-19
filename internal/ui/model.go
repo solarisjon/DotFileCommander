@@ -61,6 +61,10 @@ type Model struct {
 	setupMethod int // 0=existing, 1=create
 	setupInput  textinput.Model
 	ghStatus    gsync.GhStatus
+	gitID       gsync.GitIdentity   // current git identity
+	gitNameIn   textinput.Model     // input for git user.name
+	gitEmailIn  textinput.Model     // input for git user.email
+	gitIDField  int                 // 0=name, 1=email
 
 	// Backup/Restore progress
 	progressItems    []progressItem

@@ -11,14 +11,17 @@ gsync "github.com/solarisjon/dfc/internal/sync"
 
 // setupStep constants
 const (
-setupStepGhCheck = 0 // checking gh status
-setupStepChoose  = 1 // choose: existing URL or create new
-setupStepInput   = 2 // enter URL or repo name
-setupStepWorking = 3 // creating repo / cloning
+setupStepGhCheck   = 0 // checking gh status
+setupStepGitID     = 1 // checking/setting git identity
+setupStepChoose    = 2 // choose: existing URL or create new
+setupStepInput     = 3 // enter URL or repo name
+setupStepWorking   = 4 // creating repo / cloning
 )
 
 type ghCheckDoneMsg struct{ status gsync.GhStatus }
 type ghAuthDoneMsg struct{ err error }
+type gitIDCheckMsg struct{ id gsync.GitIdentity }
+type gitIDSetMsg struct{ err error }
 type repoCreateDoneMsg struct {
 url string
 err error
@@ -40,7 +43,9 @@ case ghCheckDoneMsg:
 m.ghStatus = msg.status
 if msg.status == gsync.GhReady {
 _ = gsync.SetupGitCredentialHelper()
-m.setupStep = setupStepChoose
+// Check git identity before proceeding
+m.setupStep = setupStepGitID
+return m, m.checkGitID()
 }
 return m, nil
 
@@ -51,8 +56,30 @@ return m, nil
 }
 _ = gsync.SetupGitCredentialHelper()
 m.ghStatus = gsync.GhReady
-m.setupStep = setupStepChoose
+m.setupStep = setupStepGitID
 m.errMsg = ""
+return m, m.checkGitID()
+
+case gitIDCheckMsg:
+m.gitID = msg.id
+if msg.id.Name != "" && msg.id.Email != "" {
+// Identity configured, skip to repo choice
+m.setupStep = setupStepChoose
+return m, nil
+}
+// Need user input — initialize fields
+m.initGitIDInputs()
+return m, nil
+
+case gitIDSetMsg:
+if msg.err != nil {
+m.errMsg = fmt.Sprintf("Failed to set git identity: %v", msg.err)
+return m, nil
+}
+m.gitID.Name = strings.TrimSpace(m.gitNameIn.Value())
+m.gitID.Email = strings.TrimSpace(m.gitEmailIn.Value())
+m.errMsg = ""
+m.setupStep = setupStepChoose
 return m, nil
 
 case repoCreateDoneMsg:
@@ -90,6 +117,11 @@ m.setupStep = setupStepChoose
 m.errMsg = ""
 return m, nil
 }
+if m.setupStep == setupStepGitID {
+m.setupStep = setupStepChoose
+m.errMsg = ""
+return m, nil
+}
 if m.cfg.IsConfigured() {
 m.currentView = viewMainMenu
 return m, nil
@@ -108,12 +140,46 @@ case "down", "j":
 if m.setupStep == setupStepChoose && m.setupMethod < 1 {
 m.setupMethod++
 }
+case "tab":
+if m.setupStep == setupStepGitID {
+m.gitIDField = (m.gitIDField + 1) % 2
+if m.gitIDField == 0 {
+m.gitNameIn.Focus()
+m.gitEmailIn.Blur()
+} else {
+m.gitNameIn.Blur()
+m.gitEmailIn.Focus()
+}
+return m, nil
+}
+case "shift+tab":
+if m.setupStep == setupStepGitID {
+m.gitIDField = (m.gitIDField + 1) % 2
+if m.gitIDField == 0 {
+m.gitNameIn.Focus()
+m.gitEmailIn.Blur()
+} else {
+m.gitNameIn.Blur()
+m.gitEmailIn.Focus()
+}
+return m, nil
+}
 }
 }
 
 if m.setupStep == setupStepInput {
 var cmd tea.Cmd
 m.setupInput, cmd = m.setupInput.Update(msg)
+return m, cmd
+}
+
+if m.setupStep == setupStepGitID {
+var cmd tea.Cmd
+if m.gitIDField == 0 {
+m.gitNameIn, cmd = m.gitNameIn.Update(msg)
+} else {
+m.gitEmailIn, cmd = m.gitEmailIn.Update(msg)
+}
 return m, cmd
 }
 
@@ -131,6 +197,16 @@ if m.ghStatus == gsync.GhNotAuthenticated {
 m.errMsg = "Run 'gh auth login' in another terminal, then press enter to retry"
 return m, m.checkGh()
 }
+
+case setupStepGitID:
+name := strings.TrimSpace(m.gitNameIn.Value())
+email := strings.TrimSpace(m.gitEmailIn.Value())
+if name == "" || email == "" {
+m.errMsg = "Both name and email are required"
+return m, nil
+}
+m.errMsg = ""
+return m, m.setGitID(name, email)
 
 case setupStepChoose:
 m.setupStep = setupStepInput
@@ -197,6 +273,41 @@ return repoCloneDoneMsg{err: err}
 }
 }
 
+func (m Model) checkGitID() tea.Cmd {
+return func() tea.Msg {
+return gitIDCheckMsg{id: gsync.CheckGitIdentity()}
+}
+}
+
+func (m Model) setGitID(name, email string) tea.Cmd {
+return func() tea.Msg {
+return gitIDSetMsg{err: gsync.SetGitIdentity(name, email)}
+}
+}
+
+func (m *Model) initGitIDInputs() {
+ti := textinput.New()
+ti.Placeholder = "Your Name"
+ti.CharLimit = 128
+ti.Width = m.contentWidth() - 4
+if m.gitID.Name != "" {
+ti.SetValue(m.gitID.Name)
+}
+ti.Focus()
+m.gitNameIn = ti
+
+ei := textinput.New()
+ei.Placeholder = "you@example.com"
+ei.CharLimit = 128
+ei.Width = m.contentWidth() - 4
+if m.gitID.Email != "" {
+ei.SetValue(m.gitID.Email)
+}
+m.gitEmailIn = ei
+
+m.gitIDField = 0
+}
+
 func (m Model) viewSetup() string {
 var b strings.Builder
 
@@ -237,8 +348,31 @@ case gsync.GhReady:
 b.WriteString(successStyle.Render("✓ GitHub CLI authenticated"))
 }
 
+case setupStepGitID:
+b.WriteString(successStyle.Render("✓ GitHub CLI authenticated"))
+b.WriteString("\n\n")
+b.WriteString("Git needs to know who you are for commits.\n")
+b.WriteString("Enter your name and email:\n\n")
+
+nameLabel := "  Name:  "
+emailLabel := "  Email: "
+if m.gitIDField == 0 {
+nameLabel = selectedStyle.Render("▸ ") + "Name:  "
+} else {
+emailLabel = selectedStyle.Render("▸ ") + "Email: "
+}
+b.WriteString(nameLabel)
+b.WriteString(m.gitNameIn.View())
+b.WriteString("\n")
+b.WriteString(emailLabel)
+b.WriteString(m.gitEmailIn.View())
+b.WriteString("\n\n")
+b.WriteString(statusBar("tab switch • enter confirm • esc skip"))
+
 case setupStepChoose:
 b.WriteString(successStyle.Render("✓ GitHub CLI authenticated"))
+b.WriteString("\n")
+b.WriteString(successStyle.Render(fmt.Sprintf("✓ Git identity: %s <%s>", m.gitID.Name, m.gitID.Email)))
 b.WriteString("\n\n")
 b.WriteString("Choose how to set up your dotfiles repository:\n\n")
 
