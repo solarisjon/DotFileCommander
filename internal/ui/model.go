@@ -81,6 +81,7 @@ type Model struct {
 	// Reset view
 	resetStep      int
 	resetConfirmed bool
+	resetType      int
 
 	// Profile edit
 	profileInput   textinput.Model
@@ -186,6 +187,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.updateSetup(msg)
 	case remoteViewSyncMsg:
 		return m.updateRemoteView(msg)
+	case resetNukeDoneMsg:
+		return m.updateResetView(msg)
 	}
 
 	switch m.currentView {

@@ -240,6 +240,46 @@ func gitOutput(dir string, args ...string) (string, error) {
 	return string(out), err
 }
 
+// NukeRepo completely resets the remote repo by removing all content,
+// creating a fresh initial commit, and force-pushing it. This destroys
+// all remote history and data.
+func NukeRepo(localPath string) error {
+	localPath = expandHome(localPath)
+
+	// Remove everything except .git
+	entries, err := os.ReadDir(localPath)
+	if err != nil {
+		return fmt.Errorf("reading repo dir: %w", err)
+	}
+	for _, e := range entries {
+		if e.Name() == ".git" {
+			continue
+		}
+		if err := os.RemoveAll(filepath.Join(localPath, e.Name())); err != nil {
+			return fmt.Errorf("removing %s: %w", e.Name(), err)
+		}
+	}
+
+	// Create a fresh README
+	readme := filepath.Join(localPath, "README.md")
+	if err := os.WriteFile(readme, []byte("# Dotfiles\n\nManaged by [dfc](https://github.com/solarisjon/DotFileCommander) (Dot File Commander).\n"), 0644); err != nil {
+		return fmt.Errorf("writing README: %w", err)
+	}
+
+	// Stage, commit, and force push
+	if err := gitCmd(localPath, "add", "-A"); err != nil {
+		return fmt.Errorf("git add: %w", err)
+	}
+	if err := gitCmd(localPath, "commit", "-m", "Reset repo — wiped by dfc"); err != nil {
+		return fmt.Errorf("git commit: %w", err)
+	}
+	// Force push to overwrite remote history
+	if err := gitCmd(localPath, "push", "--force"); err != nil {
+		return fmt.Errorf("git push --force: %w", err)
+	}
+	return nil
+}
+
 func expandHome(path string) string {
 	if strings.HasPrefix(path, "~/") {
 		if home, err := os.UserHomeDir(); err == nil {
