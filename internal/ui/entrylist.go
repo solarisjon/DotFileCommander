@@ -43,7 +43,7 @@ func newEntryDelegate() entryDelegate {
 	return entryDelegate{styles: s}
 }
 
-func (d entryDelegate) Height() int                             { return 2 }
+func (d entryDelegate) Height() int                             { return 1 }
 func (d entryDelegate) Spacing() int                            { return 0 }
 func (d entryDelegate) Update(_ tea.Msg, _ *list.Model) tea.Cmd { return nil }
 
@@ -53,30 +53,62 @@ func (d entryDelegate) Render(w io.Writer, m list.Model, index int, listItem lis
 		return
 	}
 
+	// Columns: icon(4) | name | path | version
+	totalW := m.Width()
+	iconW := 4
+	verW := 12
+	remaining := totalW - iconW - verW - 4 // 4 for spacing/borders
+	nameW := remaining * 2 / 5
+	pathW := remaining - nameW
+	if nameW < 8 {
+		nameW = 8
+	}
+	if pathW < 8 {
+		pathW = 8
+	}
+
 	icon := "📄"
 	if i.isDir {
 		icon = "📁"
 	}
 	if i.profileSpecific {
-		icon += " 👤"
+		icon = "👤"
 	}
 
-	title := fmt.Sprintf("%s  %s", icon, i.name)
-	desc := i.path
-	if i.verInfo != "" {
-		desc += "  " + i.verInfo
-	}
+	name := padRight(i.name, nameW)
+	path := padRight(i.path, pathW)
+	ver := padRight(i.verInfo, verW)
 
-	var titleStyle, descStyle lipgloss.Style
-	if index == m.Index() {
-		titleStyle = d.styles.SelectedTitle
-		descStyle = d.styles.SelectedDesc
+	isSelected := index == m.Index()
+
+	var line string
+	if isSelected {
+		nameS := lipgloss.NewStyle().Foreground(secondaryColor).Bold(true).Render(name)
+		pathS := lipgloss.NewStyle().Foreground(accentColor).Render(path)
+		verS := i.verInfo
+		if strings.Contains(i.verInfo, "⬆") {
+			verS = warningStyle.Render(ver)
+		} else if strings.Contains(i.verInfo, "✓") {
+			verS = successStyle.Render(ver)
+		} else {
+			verS = helpStyle.Render(ver)
+		}
+		line = fmt.Sprintf("▸ %s %s %s %s", icon, nameS, pathS, verS)
 	} else {
-		titleStyle = d.styles.NormalTitle
-		descStyle = d.styles.NormalDesc
+		nameS := lipgloss.NewStyle().Foreground(textColor).Render(name)
+		pathS := helpStyle.Render(path)
+		verS := i.verInfo
+		if strings.Contains(i.verInfo, "⬆") {
+			verS = warningStyle.Render(ver)
+		} else if strings.Contains(i.verInfo, "✓") {
+			verS = successStyle.Render(ver)
+		} else {
+			verS = helpStyle.Render(ver)
+		}
+		line = fmt.Sprintf("  %s %s %s %s", icon, nameS, pathS, verS)
 	}
 
-	fmt.Fprintf(w, "%s\n%s", titleStyle.Render(title), descStyle.Render(desc))
+	fmt.Fprint(w, line)
 }
 
 func (m *Model) buildEntryList() {
@@ -199,6 +231,30 @@ func (m Model) viewEntryList() string {
 		b.WriteString(statusBar("a add • b browse • esc back"))
 		return m.box().Render(b.String())
 	}
+
+	// Column header matching delegate proportions
+	cw := m.contentWidth()
+	iconW := 4
+	verW := 12
+	remaining := cw - iconW - verW - 4
+	nameW := remaining * 2 / 5
+	pathW := remaining - nameW
+	if nameW < 8 {
+		nameW = 8
+	}
+	if pathW < 8 {
+		pathW = 8
+	}
+	header := fmt.Sprintf("  %s %s %s %s",
+		dimStyle.Render(padRight("", iconW)),
+		dimStyle.Render(padRight("NAME", nameW)),
+		dimStyle.Render(padRight("PATH", pathW)),
+		dimStyle.Render(padRight("VERSION", verW)),
+	)
+	b.WriteString(header)
+	b.WriteString("\n")
+	b.WriteString(dimStyle.Render(strings.Repeat("─", cw)))
+	b.WriteString("\n")
 
 	b.WriteString(m.entryList.View())
 	b.WriteString(statusBar("a add • b browse • d delete • p profile • / filter • esc back"))
