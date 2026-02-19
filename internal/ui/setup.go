@@ -119,6 +119,10 @@ func (m Model) updateSetup(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.setupStep == setupStepGhCheck {
 			switch msg.String() {
 			case "esc":
+				if m.cfg.IsConfigured() {
+					m.currentView = viewMainMenu
+					return m, nil
+				}
 				m.quitting = true
 				return m, tea.Quit
 			case "enter":
@@ -129,6 +133,10 @@ func (m Model) updateSetup(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		// For choose step, intercept esc
 		if msg.String() == "esc" {
+			if m.cfg.IsConfigured() {
+				m.currentView = viewMainMenu
+				return m, nil
+			}
 			m.quitting = true
 			return m, tea.Quit
 		}

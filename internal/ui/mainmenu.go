@@ -6,6 +6,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	gsync "github.com/solarisjon/dfc/internal/sync"
 )
 
 func (m Model) updateMainMenu(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -64,7 +65,10 @@ func (m Model) updateMainMenu(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, m.profileInput.Focus()
 			case 6: // Settings
 				m.currentView = viewSetup
-				m.setupStep = 0
+				m.setupStep = setupStepGhCheck
+				m.ghStatus = gsync.GhChecking
+				m.errMsg = ""
+				return m, m.checkGh()
 			}
 			return m, nil
 		case "q", "esc":
