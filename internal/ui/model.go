@@ -3,6 +3,7 @@ package ui
 import (
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 	"github.com/solarisjon/dfc/internal/backup"
 	"github.com/solarisjon/dfc/internal/config"
 	"github.com/solarisjon/dfc/internal/manifest"
@@ -101,6 +102,37 @@ type progressItem struct {
 	contentHash string
 	skipped     int
 	warning     string
+}
+
+const (
+	minBoxWidth = 60
+	maxBoxWidth = 120
+	// border (2) + padding (3*2) = 8 chars of chrome
+	boxChrome = 8
+)
+
+// box returns boxStyle sized to the current terminal width.
+func (m Model) box() lipgloss.Style {
+	w := m.width
+	if w < minBoxWidth {
+		w = minBoxWidth
+	}
+	if w > maxBoxWidth {
+		w = maxBoxWidth
+	}
+	return boxStyle.Width(w)
+}
+
+// contentWidth returns usable character width inside the box.
+func (m Model) contentWidth() int {
+	w := m.width - boxChrome
+	if w < minBoxWidth-boxChrome {
+		w = minBoxWidth - boxChrome
+	}
+	if w > maxBoxWidth-boxChrome {
+		w = maxBoxWidth - boxChrome
+	}
+	return w
 }
 
 // New creates a new root model.

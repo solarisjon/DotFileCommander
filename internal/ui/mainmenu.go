@@ -96,7 +96,7 @@ func (m Model) viewMainMenu() string {
 	}
 
 	b.WriteString("\n")
-	b.WriteString(divider(38))
+	b.WriteString(divider(m.contentWidth() * 2 / 3))
 	b.WriteString("\n")
 
 	// Show tracked entries count and repo info
@@ -120,7 +120,7 @@ func (m Model) viewMainMenu() string {
 
 	b.WriteString(statusBar("↑/↓ navigate • enter select • q quit"))
 
-	return boxStyle.Render(b.String())
+	return m.box().Render(b.String())
 }
 
 var menuIcons = []string{"⬆", "⬇", "📋", "🌐", "🔄", "👤", "⚙"}

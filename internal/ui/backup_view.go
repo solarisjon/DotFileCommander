@@ -241,7 +241,7 @@ func (m Model) viewBackupProgress() string {
 		b.WriteString("\n")
 		b.WriteString(dimStyle.Render("Backing up will overwrite the remote versions."))
 		b.WriteString(statusBar("y continue • esc cancel"))
-		return boxStyle.Render(b.String())
+		return m.box().Render(b.String())
 	}
 
 	if len(m.progressItems) == 0 && !m.progressDone {
@@ -266,8 +266,11 @@ func (m Model) viewBackupProgress() string {
 				status = lipgloss.NewStyle().Foreground(accentColor).Render("⟳")
 			}
 
-			name := padRight(item.name, 24)
-			bar := renderGradientBar(item.percent, 24)
+			cw := m.contentWidth()
+			nameW := cw*2/5 - 4 // ~40% for name, minus status/spacing
+			barW := cw * 2 / 5  // ~40% for bar
+			name := padRight(item.name, nameW)
+			bar := renderGradientBar(item.percent, barW)
 			line := fmt.Sprintf(" %s  %s %s", status, name, bar)
 			b.WriteString(line)
 
@@ -297,5 +300,5 @@ func (m Model) viewBackupProgress() string {
 		b.WriteString(statusBar("backing up..."))
 	}
 
-	return boxStyle.Render(b.String())
+	return m.box().Render(b.String())
 }

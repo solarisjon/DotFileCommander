@@ -260,5 +260,5 @@ func (m Model) viewSetup() string {
 		b.WriteString(errorStyle.Render("✗ " + m.errMsg))
 	}
 
-	return boxStyle.Render(b.String())
+	return m.box().Render(b.String())
 }

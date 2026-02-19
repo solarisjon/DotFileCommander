@@ -136,5 +136,5 @@ func (m Model) viewAddEntry() string {
 		b.WriteString(statusBar("enter next • esc back"))
 	}
 
-	return boxStyle.Render(b.String())
+	return m.box().Render(b.String())
 }

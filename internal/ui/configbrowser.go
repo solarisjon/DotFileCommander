@@ -124,7 +124,7 @@ func (m Model) viewConfigBrowser() string {
 		b.WriteString(helpStyle.Render("No directories found in ~/.config"))
 		b.WriteString("\n\n")
 		b.WriteString(statusBar("esc back"))
-		return boxStyle.Render(b.String())
+		return m.box().Render(b.String())
 	}
 
 	// Count selected
@@ -168,6 +168,20 @@ func (m Model) viewConfigBrowser() string {
 		if item.friendly != item.name && len(item.name) > maxDirName {
 			maxDirName = len(item.name)
 		}
+	}
+	// Cap to fit terminal
+	cw := m.contentWidth()
+	avail := cw - 20 // checkbox + icon + spacing + status
+	if avail < 16 {
+		avail = 16
+	}
+	friendlyLimit := avail * 3 / 5
+	dirLimit := avail - friendlyLimit
+	if maxFriendly > friendlyLimit {
+		maxFriendly = friendlyLimit
+	}
+	if maxDirName > dirLimit {
+		maxDirName = dirLimit
 	}
 
 	for i := start; i < end; i++ {
@@ -215,5 +229,5 @@ func (m Model) viewConfigBrowser() string {
 	b.WriteString("\n\n")
 	b.WriteString(helpStyle.Render("space toggle • a all • n none • enter add • esc cancel"))
 
-	return boxStyle.Render(b.String())
+	return m.box().Render(b.String())
 }

@@ -146,24 +146,25 @@ func (m Model) viewRemoteView() string {
 	if m.remoteSyncing {
 		b.WriteString("Syncing repository...\n")
 		b.WriteString(helpStyle.Render("esc back"))
-		return boxStyle.Render(b.String())
+		return m.box().Render(b.String())
 	}
 
 	if m.errMsg != "" {
 		b.WriteString(errorStyle.Render("✗ "+m.errMsg))
 		b.WriteString("\n\n")
 		b.WriteString(helpStyle.Render("esc back"))
-		return boxStyle.Render(b.String())
+		return m.box().Render(b.String())
 	}
 
 	if len(m.remoteEntries) == 0 {
 		b.WriteString(helpStyle.Render("No entries found in remote or local config."))
 		b.WriteString("\n\n")
 		b.WriteString(helpStyle.Render("esc back"))
-		return boxStyle.Render(b.String())
+		return m.box().Render(b.String())
 	}
 
-	// Compute column widths
+	// Compute column widths (capped to fit terminal)
+	cw := m.contentWidth()
 	maxName := 4 // "Name"
 	maxPath := 4 // "Path"
 	for _, re := range m.remoteEntries {
@@ -173,6 +174,20 @@ func (m Model) viewRemoteView() string {
 		if len(re.path) > maxPath {
 			maxPath = len(re.path)
 		}
+	}
+	// fixed cols: Remote(8) + Local(8) + Status(~8) + spacing(~12) ≈ 36
+	fixedCols := 36
+	avail := cw - fixedCols
+	if avail < 16 {
+		avail = 16
+	}
+	nameLimit := avail * 2 / 5
+	pathLimit := avail - nameLimit
+	if maxName > nameLimit {
+		maxName = nameLimit
+	}
+	if maxPath > pathLimit {
+		maxPath = pathLimit
 	}
 
 	// Header
@@ -233,5 +248,5 @@ func (m Model) viewRemoteView() string {
 	b.WriteString("\n")
 	b.WriteString(helpStyle.Render("esc back"))
 
-	return boxStyle.Render(b.String())
+	return m.box().Render(b.String())
 }

@@ -284,7 +284,7 @@ func (m Model) viewRestoreEntries() string {
 		b.WriteString(helpStyle.Render("No entries to restore."))
 		b.WriteString("\n\n")
 		b.WriteString(statusBar("esc back"))
-		return boxStyle.Render(b.String())
+		return m.box().Render(b.String())
 	}
 
 	selCount := 0
@@ -326,6 +326,15 @@ func (m Model) viewRestoreEntries() string {
 		if len(name) > maxName {
 			maxName = len(name)
 		}
+	}
+	// Cap to fit terminal
+	cw := m.contentWidth()
+	nameLimit := cw/2 - 10
+	if nameLimit < 10 {
+		nameLimit = 10
+	}
+	if maxName > nameLimit {
+		maxName = nameLimit
 	}
 
 	// Two-pass: build lines, then right-align versions
@@ -427,7 +436,7 @@ func (m Model) viewRestoreEntries() string {
 	b.WriteString("\n\n")
 	b.WriteString(statusBar("space toggle • a all • n none • enter restore • esc back"))
 
-	return boxStyle.Render(b.String())
+	return m.box().Render(b.String())
 }
 
 func (m Model) viewRestoreRunning() string {
@@ -458,8 +467,11 @@ func (m Model) viewRestoreRunning() string {
 				status = lipgloss.NewStyle().Foreground(accentColor).Render("⟳")
 			}
 
-			name := padRight(item.name, 24)
-			bar := renderGradientBar(item.percent, 24)
+			cw := m.contentWidth()
+			nameW := cw*2/5 - 4
+			barW := cw * 2 / 5
+			name := padRight(item.name, nameW)
+			bar := renderGradientBar(item.percent, barW)
 			line := fmt.Sprintf(" %s  %s %s", status, name, bar)
 			b.WriteString(line)
 
@@ -487,5 +499,5 @@ func (m Model) viewRestoreRunning() string {
 		b.WriteString(statusBar("restoring..."))
 	}
 
-	return boxStyle.Render(b.String())
+	return m.box().Render(b.String())
 }

@@ -86,6 +86,20 @@ func (m Model) viewEntryList() string {
 				maxPath = len(e.Path)
 			}
 		}
+		// Cap columns to fit terminal width
+		cw := m.contentWidth()
+		avail := cw - 12 // icon(4) + spaces + ver hint(~8)
+		if avail < 20 {
+			avail = 20
+		}
+		nameLimit := avail * 2 / 5
+		pathLimit := avail - nameLimit
+		if maxName > nameLimit {
+			maxName = nameLimit
+		}
+		if maxPath > pathLimit {
+			maxPath = pathLimit
+		}
 
 		// Two-pass: build lines with plain-text widths, then right-align versions
 		type entryLine struct {
@@ -160,5 +174,5 @@ func (m Model) viewEntryList() string {
 
 	b.WriteString(statusBar("a add • b browse • d delete • p profile • esc back"))
 
-	return boxStyle.Render(b.String())
+	return m.box().Render(b.String())
 }

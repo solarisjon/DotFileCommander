@@ -65,5 +65,5 @@ func (m Model) viewProfileEdit() string {
 
 	b.WriteString(statusBar("enter save • esc cancel"))
 
-	return boxStyle.Render(b.String())
+	return m.box().Render(b.String())
 }

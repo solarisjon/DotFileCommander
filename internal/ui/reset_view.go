@@ -225,7 +225,7 @@ func (m Model) viewResetView() string {
 		b.WriteString(statusBar("enter/esc back to menu"))
 	}
 
-	return boxStyle.Render(b.String())
+	return m.box().Render(b.String())
 }
 
 func expandHome(path string) string {

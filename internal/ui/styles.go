@@ -65,12 +65,11 @@ var (
 			Foreground(errorColor).
 			Bold(true)
 
-	// Box border for sections
+	// Box border for sections (base style — width set dynamically via Model.box())
 	boxStyle = lipgloss.NewStyle().
 			Border(lipgloss.RoundedBorder()).
 			BorderForeground(primaryColor).
-			Padding(1, 3).
-			Width(72)
+			Padding(1, 3)
 
 	// Menu item styles
 	menuItemStyle = lipgloss.NewStyle().
