@@ -13,6 +13,8 @@ A TUI application for backing up and restoring your dotfiles across multiple mac
 - **Browse ~/.config** — File browser to quickly select config directories to track
 - **Version Tracking** — Per-entry versioning shows which entries are outdated across machines
 - **Symlink Support** — Symlinks are preserved during backup and restore, not followed
+- **Graceful Error Handling** — Unreadable files, sockets, and pipes are skipped per-entry without aborting; entries with nothing to back up get descriptive warnings
+- **Responsive UI** — Layout dynamically adapts to terminal width (60–120 chars)
 - **Reset & Wipe** — Local reset or full remote repo wipe for clean-slate recovery
 - **GitHub CLI Integration** — Uses `gh` for authentication and repo creation
 - **TUI Interface** — Built with [Charm](https://charm.sh) libraries (bubbletea, bubbles, lipgloss)
@@ -208,7 +210,7 @@ DotFileCommander/
 │       ├── restore_view.go    # Restore selection + progress
 │       ├── reset_view.go      # Local reset & remote wipe
 │       ├── remoteview.go      # Remote sync status
-│       └── profile_view.go    # Device profile management
+│       └── profileedit.go     # Device profile management
 ├── go.mod
 ├── go.sum
 └── spec.md                    # Original spec
