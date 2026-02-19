@@ -44,8 +44,7 @@ func (m Model) updateMainMenu(msg tea.Msg) (tea.Model, tea.Cmd) {
 					return m, m.profileInput.Focus()
 				}
 				m.currentView = viewRestore
-				m.initRestoreView()
-				return m, nil
+				return m, m.initRestoreView()
 			case 2: // Manage Entries
 				m.currentView = viewEntryList
 				m.buildEntryList()

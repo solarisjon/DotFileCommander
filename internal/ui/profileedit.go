@@ -28,8 +28,7 @@ func (m Model) updateProfileEdit(msg tea.Msg) (tea.Model, tea.Cmd) {
 			case viewBackup:
 				return m, m.startBackup()
 			case viewRestore:
-				m.initRestoreView()
-				return m, nil
+				return m, m.initRestoreView()
 			}
 			return m, nil
 		}

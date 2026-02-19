@@ -18,12 +18,16 @@ import (
 
 type restoreProgressMsg restore.Progress
 
-// restoreSyncDoneMsg signals repo sync completed.
+// restoreSyncDoneMsg signals repo sync completed (before restore runs).
 type restoreSyncDoneMsg struct{ err error }
 
+// restorePreSyncDoneMsg signals the initial repo sync before showing entries.
+type restorePreSyncDoneMsg struct{ err error }
+
 const (
-	restoreStepEntries = 0 // select entries to restore
-	restoreStepRunning = 1 // progress view
+	restoreStepSyncing = 0 // syncing repo before showing entries
+	restoreStepEntries = 1 // select entries to restore
+	restoreStepRunning = 2 // progress view
 )
 
 type restoreEntryItem struct {
@@ -34,18 +38,21 @@ type restoreEntryItem struct {
 	inRepo   bool // whether entry exists in the repo
 }
 
-func (m *Model) initRestoreView() {
+func (m *Model) initRestoreView() tea.Cmd {
 	m.restoreCursor = 0
+	m.restoreStep = restoreStepSyncing
 	m.progressDone = false
 	m.errMsg = ""
 	m.statusMsg = ""
 	m.progressItems = nil
 	m.restoreCh = nil
+	m.restoreEntries = nil
 
-	// Load manifest to check versions
-	m.restoreManifest, _ = manifest.Load(m.cfg.RepoPath)
-
-	m.buildRestoreEntries()
+	// Sync repo first, then build entries after sync completes
+	return func() tea.Msg {
+		err := gsync.EnsureRepo(m.cfg.RepoURL, m.cfg.RepoPath)
+		return restorePreSyncDoneMsg{err: err}
+	}
 }
 
 func (m *Model) buildRestoreEntries() {
@@ -193,11 +200,26 @@ func (m Model) updateRestoreView(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
 		switch m.restoreStep {
+		case restoreStepSyncing:
+			if msg.String() == "esc" || msg.String() == "q" {
+				m.currentView = viewMainMenu
+				return m, nil
+			}
 		case restoreStepEntries:
 			return m.updateRestoreEntries(msg)
 		case restoreStepRunning:
 			return m.updateRestoreRunning(msg)
 		}
+	case restorePreSyncDoneMsg:
+		if msg.err != nil {
+			m.errMsg = fmt.Sprintf("Repo sync failed: %v", msg.err)
+			// Still build entries from local state so user can see what's available
+		}
+		// Now that repo is synced, load manifest and build entries
+		m.restoreManifest, _ = manifest.Load(m.cfg.RepoPath)
+		m.buildRestoreEntries()
+		m.restoreStep = restoreStepEntries
+		return m, nil
 	case restoreSyncDoneMsg:
 		return m.handleRestoreSyncDone(msg)
 	}
@@ -278,12 +300,33 @@ func (m Model) updateRestoreRunning(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 func (m Model) viewRestoreProgress() string {
 	switch m.restoreStep {
+	case restoreStepSyncing:
+		return m.viewRestoreSyncing()
 	case restoreStepEntries:
 		return m.viewRestoreEntries()
 	case restoreStepRunning:
 		return m.viewRestoreRunning()
 	}
 	return ""
+}
+
+func (m Model) viewRestoreSyncing() string {
+	var b strings.Builder
+
+	b.WriteString(sectionHeader("⬇", "Restore"))
+	b.WriteString("\n\n")
+	b.WriteString(lipgloss.NewStyle().Foreground(accentColor).Render("⟳ "))
+	b.WriteString(normalStyle.Render("Syncing repository..."))
+
+	if m.errMsg != "" {
+		b.WriteString("\n\n")
+		b.WriteString(errorStyle.Render("✗ " + m.errMsg))
+	}
+
+	b.WriteString("\n\n")
+	b.WriteString(statusBar("esc back"))
+
+	return m.box().Render(b.String())
 }
 
 func (m Model) viewRestoreEntries() string {

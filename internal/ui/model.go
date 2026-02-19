@@ -227,9 +227,15 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.handleRestoreProgress(msg)
 	case restoreSyncDoneMsg:
 		return m.handleRestoreSyncDone(msg)
+	case restorePreSyncDoneMsg:
+		return m.updateRestoreView(msg)
 	case ghCheckDoneMsg:
 		return m.updateSetup(msg)
 	case ghAuthDoneMsg:
+		return m.updateSetup(msg)
+	case gitIDCheckMsg:
+		return m.updateSetup(msg)
+	case gitIDSetMsg:
 		return m.updateSetup(msg)
 	case repoCreateDoneMsg:
 		return m.updateSetup(msg)
