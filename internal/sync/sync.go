@@ -83,6 +83,16 @@ func EnsureRepo(repoURL, localPath string) error {
 		os.RemoveAll(localPath)
 		return clone(repoURL, localPath)
 	}
+
+	// Verify the existing clone points to the correct remote URL.
+	// If the user changed their repo URL in settings, re-clone.
+	currentURL, _ := gitOutput(localPath, "remote", "get-url", "origin")
+	currentURL = strings.TrimSpace(currentURL)
+	if currentURL != "" && currentURL != repoURL {
+		os.RemoveAll(localPath)
+		return clone(repoURL, localPath)
+	}
+
 	return pull(localPath)
 }
 
