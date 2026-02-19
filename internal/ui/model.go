@@ -57,11 +57,10 @@ type Model struct {
 	browserCursor int
 
 	// Setup
-	setupStep    int // setupStep* constants
-	setupForm    *huh.Form
-	setupChoice  string // "existing" or "create"
-	setupValue   string // URL or repo name
-	ghStatus     gsync.GhStatus
+	setupStep   int // setupStep* constants
+	setupMethod int // 0=existing, 1=create
+	setupInput  textinput.Model
+	ghStatus    gsync.GhStatus
 
 	// Backup/Restore progress
 	progressItems    []progressItem

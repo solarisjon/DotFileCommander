@@ -1,267 +1,281 @@
 package ui
 
 import (
-	"fmt"
-	"strings"
+"fmt"
+"strings"
 
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/huh"
-	gsync "github.com/solarisjon/dfc/internal/sync"
+"github.com/charmbracelet/bubbles/textinput"
+tea "github.com/charmbracelet/bubbletea"
+gsync "github.com/solarisjon/dfc/internal/sync"
 )
 
-// setupStep constants for clarity
+// setupStep constants
 const (
-	setupStepGhCheck = 0 // checking gh status
-	setupStepChoose  = 1 // choose: existing URL or create new (huh form)
-	setupStepWorking = 2 // creating repo / cloning
+setupStepGhCheck = 0 // checking gh status
+setupStepChoose  = 1 // choose: existing URL or create new
+setupStepInput   = 2 // enter URL or repo name
+setupStepWorking = 3 // creating repo / cloning
 )
 
 type ghCheckDoneMsg struct{ status gsync.GhStatus }
 type ghAuthDoneMsg struct{ err error }
 type repoCreateDoneMsg struct {
-	url string
-	err error
+url string
+err error
 }
 type repoCloneDoneMsg struct{ err error }
 
-func (m *Model) buildSetupForm() tea.Cmd {
-	m.setupForm = huh.NewForm(
-		huh.NewGroup(
-			huh.NewSelect[string]().
-				Key("method").
-				Title("Repository Setup").
-				Description("Choose how to set up your dotfiles repository").
-				Options(
-					huh.NewOption("Use an existing repository URL", "existing"),
-					huh.NewOption("Create a new private repository (via gh)", "create"),
-				).
-				Value(&m.setupChoice),
-			huh.NewInput().
-				Key("value").
-				Title("Repository").
-				DescriptionFunc(func() string {
-					if m.setupChoice == "create" {
-						return "Name for your new repo (e.g. dotfiles)"
-					}
-					return "Full repository URL"
-				}, &m.setupChoice).
-				PlaceholderFunc(func() string {
-					if m.setupChoice == "create" {
-						return "dotfiles"
-					}
-					return "https://github.com/username/dotfiles.git"
-				}, &m.setupChoice).
-				Value(&m.setupValue),
-		),
-	).WithWidth(m.contentWidth()).
-		WithShowHelp(false).
-		WithShowErrors(true).
-		WithTheme(dfcHuhTheme())
-	return m.setupForm.Init()
+func (m *Model) initSetupInput() {
+ti := textinput.New()
+ti.Placeholder = "https://github.com/username/dotfiles.git"
+ti.CharLimit = 256
+ti.Width = m.contentWidth() - 4
+m.setupInput = ti
 }
 
 func (m Model) updateSetup(msg tea.Msg) (tea.Model, tea.Cmd) {
-	switch msg := msg.(type) {
+switch msg := msg.(type) {
 
-	case ghCheckDoneMsg:
-		m.ghStatus = msg.status
-		if msg.status == gsync.GhReady {
-			_ = gsync.SetupGitCredentialHelper()
-			m.setupStep = setupStepChoose
-			cmd := m.buildSetupForm()
-			return m, cmd
-		}
-		return m, nil
+case ghCheckDoneMsg:
+m.ghStatus = msg.status
+if msg.status == gsync.GhReady {
+_ = gsync.SetupGitCredentialHelper()
+m.setupStep = setupStepChoose
+}
+return m, nil
 
-	case ghAuthDoneMsg:
-		if msg.err != nil {
-			m.errMsg = fmt.Sprintf("Authentication failed: %v", msg.err)
-			return m, nil
-		}
-		_ = gsync.SetupGitCredentialHelper()
-		m.ghStatus = gsync.GhReady
-		m.setupStep = setupStepChoose
-		m.errMsg = ""
-		cmd := m.buildSetupForm()
-		return m, cmd
+case ghAuthDoneMsg:
+if msg.err != nil {
+m.errMsg = fmt.Sprintf("Authentication failed: %v", msg.err)
+return m, nil
+}
+_ = gsync.SetupGitCredentialHelper()
+m.ghStatus = gsync.GhReady
+m.setupStep = setupStepChoose
+m.errMsg = ""
+return m, nil
 
-	case repoCreateDoneMsg:
-		if msg.err != nil {
-			m.errMsg = fmt.Sprintf("Failed to create repo: %v", msg.err)
-			m.setupStep = setupStepChoose
-			cmd := m.buildSetupForm()
-			return m, cmd
-		}
-		m.cfg.RepoURL = msg.url
-		if err := m.cfg.Save(); err != nil {
-			m.errMsg = fmt.Sprintf("Error saving config: %v", err)
-			m.setupStep = setupStepChoose
-			cmd := m.buildSetupForm()
-			return m, cmd
-		}
-		m.statusMsg = "Repository created!"
-		m.setupStep = setupStepWorking
-		return m, m.cloneRepo()
+case repoCreateDoneMsg:
+if msg.err != nil {
+m.errMsg = fmt.Sprintf("Failed to create repo: %v", msg.err)
+m.setupStep = setupStepInput
+return m, nil
+}
+m.cfg.RepoURL = msg.url
+if err := m.cfg.Save(); err != nil {
+m.errMsg = fmt.Sprintf("Error saving config: %v", err)
+m.setupStep = setupStepInput
+return m, nil
+}
+m.statusMsg = "Repository created!"
+m.setupStep = setupStepWorking
+return m, m.cloneRepo()
 
-	case repoCloneDoneMsg:
-		if msg.err != nil {
-			m.errMsg = fmt.Sprintf("Failed to clone repo: %v", msg.err)
-			m.setupStep = setupStepChoose
-			cmd := m.buildSetupForm()
-			return m, cmd
-		}
-		m.errMsg = ""
-		m.statusMsg = ""
-		m.currentView = viewMainMenu
-		return m, nil
+case repoCloneDoneMsg:
+if msg.err != nil {
+m.errMsg = fmt.Sprintf("Failed to clone repo: %v", msg.err)
+m.setupStep = setupStepInput
+return m, nil
+}
+m.errMsg = ""
+m.statusMsg = ""
+m.currentView = viewMainMenu
+return m, nil
 
-	case tea.KeyMsg:
-		if m.setupStep == setupStepGhCheck {
-			switch msg.String() {
-			case "esc":
-				if m.cfg.IsConfigured() {
-					m.currentView = viewMainMenu
-					return m, nil
-				}
-				m.quitting = true
-				return m, tea.Quit
-			case "enter":
-				return m.handleSetupGhEnter()
-			}
-			return m, nil
-		}
+case tea.KeyMsg:
+switch msg.String() {
+case "esc":
+if m.setupStep == setupStepInput {
+m.setupStep = setupStepChoose
+m.errMsg = ""
+return m, nil
+}
+if m.cfg.IsConfigured() {
+m.currentView = viewMainMenu
+return m, nil
+}
+m.quitting = true
+return m, tea.Quit
 
-		// For choose step, intercept esc
-		if msg.String() == "esc" {
-			if m.cfg.IsConfigured() {
-				m.currentView = viewMainMenu
-				return m, nil
-			}
-			m.quitting = true
-			return m, tea.Quit
-		}
-	}
+case "enter":
+return m.handleSetupEnter()
 
-	// Forward to huh form for choose step
-	if m.setupStep == setupStepChoose && m.setupForm != nil {
-		form, cmd := m.setupForm.Update(msg)
-		if f, ok := form.(*huh.Form); ok {
-			m.setupForm = f
-		}
-
-		if m.setupForm.State == huh.StateCompleted {
-			val := strings.TrimSpace(m.setupValue)
-			if val == "" {
-				m.errMsg = "Please enter a value"
-				initCmd := m.buildSetupForm()
-				return m, initCmd
-			}
-
-			if m.setupChoice == "existing" {
-				m.cfg.RepoURL = val
-				if err := m.cfg.Save(); err != nil {
-					m.errMsg = fmt.Sprintf("Error saving config: %v", err)
-					initCmd := m.buildSetupForm()
-					return m, initCmd
-				}
-				m.setupStep = setupStepWorking
-				m.statusMsg = "Cloning repository..."
-				m.errMsg = ""
-				return m, m.cloneRepo()
-			}
-
-			// Create new repo
-			m.setupStep = setupStepWorking
-			m.statusMsg = "Creating repository..."
-			m.errMsg = ""
-			return m, m.createRepo(val)
-		}
-
-		return m, cmd
-	}
-
-	return m, nil
+case "up", "k":
+if m.setupStep == setupStepChoose && m.setupMethod > 0 {
+m.setupMethod--
+}
+case "down", "j":
+if m.setupStep == setupStepChoose && m.setupMethod < 1 {
+m.setupMethod++
+}
+}
 }
 
-func (m Model) handleSetupGhEnter() (tea.Model, tea.Cmd) {
-	if m.ghStatus == gsync.GhNotInstalled {
-		m.errMsg = "Please install the GitHub CLI first: https://cli.github.com"
-		return m, nil
-	}
-	if m.ghStatus == gsync.GhNotAuthenticated {
-		m.errMsg = "Run 'gh auth login' in another terminal, then press enter to retry"
-		return m, m.checkGh()
-	}
-	return m, nil
+if m.setupStep == setupStepInput {
+var cmd tea.Cmd
+m.setupInput, cmd = m.setupInput.Update(msg)
+return m, cmd
+}
+
+return m, nil
+}
+
+func (m Model) handleSetupEnter() (tea.Model, tea.Cmd) {
+switch m.setupStep {
+case setupStepGhCheck:
+if m.ghStatus == gsync.GhNotInstalled {
+m.errMsg = "Please install the GitHub CLI first: https://cli.github.com"
+return m, nil
+}
+if m.ghStatus == gsync.GhNotAuthenticated {
+m.errMsg = "Run 'gh auth login' in another terminal, then press enter to retry"
+return m, m.checkGh()
+}
+
+case setupStepChoose:
+m.setupStep = setupStepInput
+m.initSetupInput()
+if m.setupMethod == 0 {
+// Pre-fill with current URL if configured
+if m.cfg.RepoURL != "" {
+m.setupInput.SetValue(m.cfg.RepoURL)
+}
+m.setupInput.Placeholder = "https://github.com/username/dotfiles.git"
+} else {
+m.setupInput.Placeholder = "dotfiles"
+}
+m.setupInput.Focus()
+m.errMsg = ""
+return m, m.setupInput.Focus()
+
+case setupStepInput:
+val := strings.TrimSpace(m.setupInput.Value())
+if val == "" {
+m.errMsg = "Please enter a value"
+return m, nil
+}
+
+if m.setupMethod == 0 {
+m.cfg.RepoURL = val
+if err := m.cfg.Save(); err != nil {
+m.errMsg = fmt.Sprintf("Error saving config: %v", err)
+return m, nil
+}
+m.setupStep = setupStepWorking
+m.statusMsg = "Cloning repository..."
+m.errMsg = ""
+return m, m.cloneRepo()
+}
+
+// Create new repo
+m.setupStep = setupStepWorking
+m.statusMsg = "Creating repository..."
+m.errMsg = ""
+return m, m.createRepo(val)
+}
+
+return m, nil
 }
 
 func (m Model) checkGh() tea.Cmd {
-	return func() tea.Msg {
-		return ghCheckDoneMsg{status: gsync.CheckGh()}
-	}
+return func() tea.Msg {
+return ghCheckDoneMsg{status: gsync.CheckGh()}
+}
 }
 
 func (m Model) createRepo(name string) tea.Cmd {
-	return func() tea.Msg {
-		url, err := gsync.CreateGitHubRepo(name)
-		return repoCreateDoneMsg{url: url, err: err}
-	}
+return func() tea.Msg {
+url, err := gsync.CreateGitHubRepo(name)
+return repoCreateDoneMsg{url: url, err: err}
+}
 }
 
 func (m Model) cloneRepo() tea.Cmd {
-	return func() tea.Msg {
-		err := gsync.EnsureRepo(m.cfg.RepoURL, m.cfg.RepoPath)
-		return repoCloneDoneMsg{err: err}
-	}
+return func() tea.Msg {
+err := gsync.EnsureRepo(m.cfg.RepoURL, m.cfg.RepoPath)
+return repoCloneDoneMsg{err: err}
+}
 }
 
 func (m Model) viewSetup() string {
-	var b strings.Builder
+var b strings.Builder
 
-	b.WriteString(sectionHeader("🔧", "DFC Setup"))
-	b.WriteString("\n\n")
-	b.WriteString("DFC backs up your dotfiles to a GitHub repository so you can\n")
-	b.WriteString("keep your configurations in sync across multiple machines.\n\n")
+b.WriteString(sectionHeader("🔧", "DFC Setup"))
+b.WriteString("\n\n")
 
-	switch m.setupStep {
-	case setupStepGhCheck:
-		switch m.ghStatus {
-		case gsync.GhChecking:
-			b.WriteString("Checking for GitHub CLI...")
-		case gsync.GhNotInstalled:
-			b.WriteString(errorStyle.Render("✗ GitHub CLI (gh) is not installed"))
-			b.WriteString("\n\n")
-			b.WriteString("DFC uses the GitHub CLI to handle authentication.\n")
-			b.WriteString("Install it from: ")
-			b.WriteString(selectedStyle.Render("https://cli.github.com"))
-			b.WriteString("\n\n")
-			b.WriteString(helpStyle.Render("Install gh, then restart dfc"))
-		case gsync.GhNotAuthenticated:
-			b.WriteString(warningStyle.Render("⚠ GitHub CLI is installed but not logged in"))
-			b.WriteString("\n\n")
-			b.WriteString("Run this in another terminal:\n\n")
-			b.WriteString(selectedStyle.Render("  gh auth login"))
-			b.WriteString("\n\n")
-			b.WriteString(helpStyle.Render("enter retry • esc quit"))
-		case gsync.GhReady:
-			b.WriteString(successStyle.Render("✓ GitHub CLI authenticated"))
-		}
+// Show current config if re-entering from Settings
+if m.cfg.IsConfigured() {
+b.WriteString(helpStyle.Render("Current repo: "))
+b.WriteString(selectedStyle.Render(m.cfg.RepoURL))
+b.WriteString("\n\n")
+} else {
+b.WriteString("DFC backs up your dotfiles to a GitHub repository so you can\n")
+b.WriteString("keep your configurations in sync across multiple machines.\n\n")
+}
 
-	case setupStepChoose:
-		b.WriteString(successStyle.Render("✓ GitHub CLI authenticated"))
-		b.WriteString("\n\n")
-		if m.setupForm != nil {
-			b.WriteString(m.setupForm.View())
-		}
+switch m.setupStep {
+case setupStepGhCheck:
+switch m.ghStatus {
+case gsync.GhChecking:
+b.WriteString("Checking for GitHub CLI...")
+case gsync.GhNotInstalled:
+b.WriteString(errorStyle.Render("✗ GitHub CLI (gh) is not installed"))
+b.WriteString("\n\n")
+b.WriteString("DFC uses the GitHub CLI to handle authentication.\n")
+b.WriteString("Install it from: ")
+b.WriteString(selectedStyle.Render("https://cli.github.com"))
+b.WriteString("\n\n")
+b.WriteString(statusBar("esc back"))
+case gsync.GhNotAuthenticated:
+b.WriteString(warningStyle.Render("⚠ GitHub CLI is installed but not logged in"))
+b.WriteString("\n\n")
+b.WriteString("Run this in another terminal:\n\n")
+b.WriteString(selectedStyle.Render("  gh auth login"))
+b.WriteString("\n\n")
+b.WriteString(statusBar("enter retry • esc back"))
+case gsync.GhReady:
+b.WriteString(successStyle.Render("✓ GitHub CLI authenticated"))
+}
 
-	case setupStepWorking:
-		b.WriteString(m.statusMsg)
-	}
+case setupStepChoose:
+b.WriteString(successStyle.Render("✓ GitHub CLI authenticated"))
+b.WriteString("\n\n")
+b.WriteString("Choose how to set up your dotfiles repository:\n\n")
 
-	if m.errMsg != "" {
-		b.WriteString("\n\n")
-		b.WriteString(errorStyle.Render("✗ " + m.errMsg))
-	}
+methods := []string{
+"Use an existing GitHub repository",
+"Create a new private repository",
+}
+for i, method := range methods {
+if i == m.setupMethod {
+b.WriteString(selectedStyle.Render("▸ " + method))
+} else {
+b.WriteString(normalStyle.Render("  " + method))
+}
+b.WriteString("\n")
+}
 
-	return m.box().Render(b.String())
+b.WriteString("\n")
+b.WriteString(statusBar("↑/↓ select • enter confirm • esc back"))
+
+case setupStepInput:
+if m.setupMethod == 0 {
+b.WriteString("Enter your repository URL:\n\n")
+} else {
+b.WriteString("Enter a name for your new repository:\n\n")
+}
+b.WriteString(m.setupInput.View())
+b.WriteString("\n\n")
+b.WriteString(statusBar("enter confirm • esc back"))
+
+case setupStepWorking:
+b.WriteString(m.statusMsg)
+}
+
+if m.errMsg != "" {
+b.WriteString("\n\n")
+b.WriteString(errorStyle.Render("✗ " + m.errMsg))
+}
+
+return m.box().Render(b.String())
 }
