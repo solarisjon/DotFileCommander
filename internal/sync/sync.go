@@ -188,6 +188,8 @@ func AddRemoteAndPush(localPath, url string) error {
 
 func clone(url, dest string) error {
 	cmd := exec.Command("git", "clone", url, dest)
+	// Use a known-good CWD so clone works even if the process CWD was deleted
+	cmd.Dir = os.TempDir()
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("git clone: %s: %w", string(out), err)
