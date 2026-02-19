@@ -1,37 +1,43 @@
 # DFC — Dot File Commander
 
-A TUI application for backing up and restoring your dotfiles to a GitHub repository. Keep your configurations in sync across multiple machines with tag-based filtering and version tracking.
+A TUI application for backing up and restoring your dotfiles across multiple machines via a Git repository. Keep your configurations in sync with device profiles, content-hash conflict detection, and per-entry version tracking.
 
-![Go](https://img.shields.io/badge/Go-1.25+-00ADD8?logo=go&logoColor=white)
+![Go](https://img.shields.io/badge/Go-1.24+-00ADD8?logo=go&logoColor=white)
 ![Platform](https://img.shields.io/badge/Platform-macOS%20%7C%20Linux-lightgrey)
 
 ## Features
 
-- **Backup & Restore** — Copy your dotfile configs to/from a GitHub repo with progress bars
+- **Backup & Restore** — Sync dotfiles to/from a Git repo with real-time progress bars
+- **Device Profiles** — Per-machine identities (e.g. `work`, `home`) with profile-specific storage so the same config can differ between machines
+- **Conflict Detection** — SHA256 content hashing detects remote changes before overwriting
 - **Browse ~/.config** — File browser to quickly select config directories to track
-- **Tag-based filtering** — Tag entries (e.g. `home`, `work`, `laptop`) and restore only what you need
-- **Version tracking** — See which entries are outdated across machines with per-entry versioning
-- **GitHub CLI integration** — Uses `gh` for authentication, no manual SSH key setup required
-- **TUI interface** — Built with [Charm](https://charm.sh) libraries (bubbletea, bubbles, lipgloss)
+- **Version Tracking** — Per-entry versioning shows which entries are outdated across machines
+- **Symlink Support** — Symlinks are preserved during backup and restore, not followed
+- **Reset & Wipe** — Local reset or full remote repo wipe for clean-slate recovery
+- **GitHub CLI Integration** — Uses `gh` for authentication and repo creation
+- **TUI Interface** — Built with [Charm](https://charm.sh) libraries (bubbletea, bubbles, lipgloss)
 
 ## Installation
 
 ### Prerequisites
 
-- **Go 1.25+**
+- **Go 1.24+**
 - **GitHub CLI** (`gh`) — [Install from cli.github.com](https://cli.github.com)
+
+### Quick install
+
+```bash
+git clone https://github.com/solarisjon/DotFileCommander.git
+cd DotFileCommander
+./install.sh
+```
+
+This builds the binary and installs it to `~/.local/bin/dfc`.
 
 ### Build from source
 
 ```bash
-cd DotFileSync
 go build -o dfc ./cmd/dfc/
-```
-
-Optionally move the binary to your PATH:
-
-```bash
-mv dfc /usr/local/bin/
 ```
 
 ### GitHub CLI setup
@@ -47,7 +53,7 @@ DFC will detect `gh` and guide you through setup on first run.
 ## Usage
 
 ```bash
-./dfc
+dfc
 ```
 
 ### First run
@@ -56,7 +62,8 @@ On first launch, DFC walks you through setup:
 
 1. **GitHub CLI check** — Verifies `gh` is installed and authenticated
 2. **Repository setup** — Enter an existing repo URL or create a new one via `gh`
-3. **Ready** — You're taken to the main menu
+3. **Device profile** — Set a profile name for this machine (e.g. `work`, `home`)
+4. **Ready** — You're taken to the main menu
 
 ### Main menu
 
@@ -69,48 +76,54 @@ On first launch, DFC walks you through setup:
 **Options:**
 
 - **⬆ Backup** — Back up all tracked entries to the repo
-- **⬇ Restore** — Restore entries with tag filtering and version comparison
-- **📋 Manage Entries** — Add, remove, and tag tracked dotfiles
+- **⬇ Restore** — Restore entries with version comparison
+- **📋 Manage Entries** — Add, remove, and configure tracked dotfiles
+- **🌐 Remote Status** — View sync state with the remote repo
+- **🔄 Reset** — Local reset or full remote wipe
+- **👤 Device Profile** — View or change this machine's profile
 - **⚙ Settings** — Re-run setup wizard
 
 ### Managing entries
 
 | Key | Action |
 |-----|--------|
-| `a` | Add a new entry manually (path → name → tags) |
+| `a` | Add a new entry (path → name → profile-specific?) |
 | `b` | Browse `~/.config` directories to bulk-add |
 | `d` | Delete selected entry |
-| `t` | Edit tags on selected entry |
+| `p` | Toggle profile-specific on selected entry |
 | `Esc` | Back to main menu |
 
 #### Browsing ~/.config
 
-Press `b` from the entry list to open the config browser:
-
-1. Enter tags to apply to all selections (comma-separated, or leave blank)
-2. Select directories with `Space`, `a` for all, `n` for none
-3. Press `Enter` to add selected entries
-
-Already-tracked entries are shown as dimmed with a green checkmark.
+Press `b` from the entry list to open the config browser. Select directories with `Space`, `a` for all, `n` for none, then `Enter` to add. Already-tracked entries appear dimmed with a checkmark.
 
 ### Backup
 
 Select **Backup** from the main menu. DFC will:
 
 1. Sync the local repo clone
-2. Copy each tracked entry into the repo (skipping `.git` subdirectories)
-3. Bump version numbers in the manifest
+2. Copy each tracked entry into the repo (preserving symlinks, skipping `.git`)
+3. Compute content hashes and bump versions in the manifest
 4. Commit and push
+
+Profile-specific entries are stored under `profiles/<profile>/`, shared entries under `shared/`.
 
 ### Restore
 
-Select **Restore** from the main menu for a guided flow:
+Select **Restore** from the main menu:
 
-1. **Filter by tags** — Select `All` or pick specific tags
-2. **Select entries** — Check which entries to restore, with version indicators:
+1. **Select entries** — Check which entries to restore, with version indicators:
    - `⬆ v1→v3` (amber) — repo has a newer version
    - `v3 ✓` (green) — up to date
-3. **Progress** — Files are restored with progress bars
+   - 👤 icon for profile-specific entries
+2. **Progress** — Files are restored with progress bars (symlinks preserved)
+
+### Reset
+
+Two options from the reset menu:
+
+- **🧹 Local Reset** — Removes the local clone and clears config entries. Remote repo is untouched.
+- **💣 Full Remote Wipe** — Destroys all files and history in the remote repo (force-push). Requires double confirmation. Useful for testing or clearing out-of-sync states.
 
 ## Configuration
 
@@ -119,80 +132,99 @@ Config is stored at `~/.config/dfc/config.yaml`:
 ```yaml
 repo_url: https://github.com/user/dotfiles.git
 repo_path: /Users/you/.config/dfc/repo
+device_profile: work
 entries:
   - path: ~/.config/kitty
     name: Kitty Terminal
-    tags: [home, work]
     is_dir: true
     local_version: 3
-  - path: ~/.config/nvim
-    name: Neovim
-    tags: [home]
+    last_hash: a1b2c3...
+  - path: ~/.config/claude
+    name: Claude Code
     is_dir: true
+    profile_specific: true
     local_version: 2
+    last_hash: d4e5f6...
 ```
 
 ### Version manifest
 
-A `.dfc-manifest.yaml` file is stored in the git repo tracking per-entry versions:
+A `.dfc-manifest.yaml` file in the repo tracks per-entry versions and content hashes:
 
 ```yaml
 entries:
-  ~/.config/kitty:
+  shared/~/.config/kitty:
     version: 3
+    hash: a1b2c3...
     updated_at: 2026-02-17T02:30:00Z
+    updated_by: work-laptop
+  profiles/work/~/.config/claude:
+    version: 2
+    hash: d4e5f6...
+    updated_at: 2026-02-18T10:15:00Z
     updated_by: work-laptop
 ```
 
-This lets DFC show which entries are outdated when you switch machines.
+### Repo layout
+
+```
+repo/
+├── .dfc-manifest.yaml
+├── shared/                    # Entries shared across all devices
+│   ├── .bashrc
+│   └── .config/nvim/
+├── profiles/
+│   ├── work/                  # Work-machine specific entries
+│   │   └── .config/claude/
+│   └── home/                  # Home-machine specific entries
+│       └── .config/claude/
+└── README.md
+```
 
 ## Project structure
 
 ```
-DotFileSync/
-├── cmd/dfc/main.go           # Entry point
+DotFileCommander/
+├── cmd/dfc/main.go            # Entry point
+├── install.sh                 # Build & install script
 ├── internal/
-│   ├── config/config.go      # YAML config, Entry CRUD
-│   ├── entry/entry.go        # Known apps, friendly names, path helpers
-│   ├── manifest/manifest.go  # Per-entry version tracking
-│   ├── sync/sync.go          # Git operations, gh CLI integration
-│   ├── backup/backup.go      # Copy entries to repo with progress
-│   ├── restore/restore.go    # Copy from repo to filesystem
+│   ├── config/config.go       # YAML config, Entry CRUD
+│   ├── entry/entry.go         # Known apps, friendly names, path helpers
+│   ├── hash/hash.go           # SHA256 hashing for files, dirs, symlinks
+│   ├── manifest/manifest.go   # Per-entry version & hash tracking
+│   ├── storage/storage.go     # Shared vs profile-specific path routing
+│   ├── sync/sync.go           # Git operations, gh CLI, repo wipe
+│   ├── backup/backup.go       # Copy entries to repo with progress
+│   ├── restore/restore.go     # Copy from repo to filesystem
 │   └── ui/
-│       ├── model.go          # Root bubbletea model
-│       ├── styles.go         # Lipgloss theme (purple/cyan/green)
-│       ├── setup.go          # Setup wizard
-│       ├── mainmenu.go       # Main menu
-│       ├── entrylist.go      # Entry management list
-│       ├── addentry.go       # Add entry flow
-│       ├── tagedit.go        # Tag editor
-│       ├── configbrowser.go  # ~/.config directory browser
-│       ├── backup_view.go    # Backup progress
-│       └── restore_view.go   # Restore selection + progress
+│       ├── model.go           # Root bubbletea model & view routing
+│       ├── styles.go          # Lipgloss theme
+│       ├── setup.go           # Setup wizard
+│       ├── mainmenu.go        # Main menu
+│       ├── entrylist.go       # Entry management list
+│       ├── addentry.go        # Add entry flow (path → name → profile)
+│       ├── configbrowser.go   # ~/.config directory browser
+│       ├── backup_view.go     # Backup progress
+│       ├── restore_view.go    # Restore selection + progress
+│       ├── reset_view.go      # Local reset & remote wipe
+│       ├── remoteview.go      # Remote sync status
+│       └── profile_view.go    # Device profile management
 ├── go.mod
 ├── go.sum
-└── spec.md                   # Original spec
+└── spec.md                    # Original spec
 ```
 
 ## How it works
 
-DFC uses a git repository as a sync backend — but git is an implementation detail hidden from the user. Files are organized in the repo mirroring their home-relative paths:
+DFC uses a Git repository as a sync backend — git is an implementation detail hidden from the user. Entries are organized by profile:
 
-```
-repo/
-├── .config/
-│   ├── kitty/
-│   │   └── kitty.conf
-│   ├── nvim/
-│   │   ├── init.lua
-│   │   └── lua/...
-│   └── starship.toml
-├── .dfc-manifest.yaml
-└── README.md
-```
+- **Shared entries** → `repo/shared/<home-relative-path>`
+- **Profile-specific entries** → `repo/profiles/<profile>/<home-relative-path>`
 
-Authentication is handled entirely through the GitHub CLI (`gh auth setup-git`), which configures git's credential helper for HTTPS.
+Content hashing (SHA256) ensures that changes are detected before overwriting. If a remote file has changed since your last sync, DFC warns you before restoring.
+
+Authentication is handled through the GitHub CLI (`gh auth setup-git`), which configures git's credential helper for HTTPS.
 
 ## License
 
-Internal tool — NetApp/CPET.
+MIT
