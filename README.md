@@ -66,9 +66,10 @@ dfc
 On first launch, DFC walks you through setup:
 
 1. **GitHub CLI check** — Verifies `gh` is installed and authenticated
-2. **Repository setup** — Enter an existing repo URL or create a new one via `gh`
-3. **Device profile** — Set a profile name for this machine (e.g. `work`, `home`)
-4. **Ready** — You're taken to the main menu
+2. **Git identity** — Ensures `user.name` and `user.email` are configured (auto-skips if already set)
+3. **Repository setup** — Enter an existing repo URL or create a new one via `gh`
+4. **Device profile** — Set a profile name for this machine (e.g. `work`, `home`)
+5. **Ready** — You're taken to the main menu
 
 ### Main menu
 
@@ -230,6 +231,8 @@ DFC uses a Git repository as a sync backend — git is an implementation detail 
 Content hashing (SHA256) ensures that changes are detected before overwriting. If a remote file has changed since your last sync, DFC warns you before restoring.
 
 Authentication is handled through the GitHub CLI (`gh auth setup-git`), which configures git's credential helper for HTTPS.
+
+If the configured repo URL changes (e.g. you point DFC at a different repo), the local clone is automatically replaced on next sync — no manual cleanup needed.
 
 ## License
 
