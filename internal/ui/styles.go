@@ -69,7 +69,8 @@ var (
 	boxStyle = lipgloss.NewStyle().
 			Border(lipgloss.RoundedBorder()).
 			BorderForeground(primaryColor).
-			Padding(1, 2)
+			Padding(1, 3).
+			Width(72)
 
 	// Menu item styles
 	menuItemStyle = lipgloss.NewStyle().
@@ -96,11 +97,19 @@ var (
 )
 
 // padRight pads a string with spaces to reach the desired width.
+// If the string exceeds width, it is truncated with an ellipsis.
 func padRight(s string, width int) string {
-	if len(s) >= width {
+	if width <= 0 {
 		return s
 	}
-	return s + strings.Repeat(" ", width-len(s))
+	r := []rune(s)
+	if len(r) > width {
+		if width > 1 {
+			return string(r[:width-1]) + "…"
+		}
+		return string(r[:width])
+	}
+	return s + strings.Repeat(" ", width-len(r))
 }
 
 // lineWithRightAlign renders a left portion padded to colWidth, then appends the right portion.
@@ -115,15 +124,15 @@ func lineWithRightAlign(left string, leftPlain int, right string, colWidth int) 
 // logo renders the DFC ASCII art header with gradient coloring.
 func logo() string {
 	lines := []string{
-		`  ╺━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━╸`,
-		`   ██████╗ ███████╗ ██████╗`,
-		`   ██╔══██╗██╔════╝██╔════╝`,
-		`   ██║  ██║█████╗  ██║     `,
-		`   ██║  ██║██╔══╝  ██║     `,
-		`   ██████╔╝██║     ╚██████╗`,
-		`   ╚═════╝ ╚═╝      ╚═════╝`,
-		`   D O T  F I L E  C O M M A N D E R`,
-		`  ╺━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━╸`,
+		`  ╺━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━╸`,
+		`       ██████╗ ███████╗ ██████╗`,
+		`       ██╔══██╗██╔════╝██╔════╝`,
+		`       ██║  ██║█████╗  ██║     `,
+		`       ██║  ██║██╔══╝  ██║     `,
+		`       ██████╔╝██║     ╚██████╗`,
+		`       ╚═════╝ ╚═╝      ╚═════╝`,
+		`       D O T  F I L E  C O M M A N D E R`,
+		`  ╺━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━╸`,
 	}
 
 	var b strings.Builder

@@ -458,8 +458,8 @@ func (m Model) viewRestoreRunning() string {
 				status = lipgloss.NewStyle().Foreground(accentColor).Render("⟳")
 			}
 
-			name := padRight(item.name, 20)
-			bar := renderGradientBar(item.percent, 20)
+			name := padRight(item.name, 24)
+			bar := renderGradientBar(item.percent, 24)
 			line := fmt.Sprintf(" %s  %s %s", status, name, bar)
 			b.WriteString(line)
 
