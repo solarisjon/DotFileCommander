@@ -137,7 +137,7 @@ func (m Model) viewConfigBrowser() string {
 	}
 
 	// Calculate visible window for scrolling
-	maxVisible := 15
+	maxVisible := m.listHeight(10) // header + selected count + help + chrome
 	start := 0
 	if len(m.browserDirs) > maxVisible {
 		// Center cursor in window

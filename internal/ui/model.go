@@ -114,6 +114,10 @@ const (
 	maxBoxWidth = 120
 	// border (2) + padding (3*2) = 8 chars of chrome
 	boxChrome = 8
+	// vertical chrome: border (2) + padding (2) = 4 lines
+	boxVChrome = 4
+	minListHeight = 8
+	maxListHeight = 30
 )
 
 // box returns boxStyle sized to the current terminal width.
@@ -138,6 +142,20 @@ func (m Model) contentWidth() int {
 		w = maxBoxWidth - boxChrome
 	}
 	return w
+}
+
+// listHeight returns usable row count for scrollable lists/tables.
+// overhead is the number of lines used by headers, footers, and chrome
+// surrounding the scrollable area within a given view.
+func (m Model) listHeight(overhead int) int {
+	h := m.height - boxVChrome - overhead
+	if h < minListHeight {
+		h = minListHeight
+	}
+	if h > maxListHeight {
+		h = maxListHeight
+	}
+	return h
 }
 
 // New creates a new root model.
@@ -183,6 +201,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
 		m.height = msg.Height
+		// Resize active scrollable components
+		if m.entryList != nil {
+			m.entryList.SetSize(m.contentWidth(), m.listHeight(6))
+		}
+		if m.remoteTable != nil {
+			m.remoteTable.SetHeight(m.listHeight(10))
+		}
 		return m, nil
 	case tea.KeyMsg:
 		switch msg.String() {

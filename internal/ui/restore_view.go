@@ -295,7 +295,7 @@ func (m Model) viewRestoreEntries() string {
 	}
 
 	// Scrollable list
-	maxVisible := 15
+	maxVisible := m.listHeight(10) // header + selected count + help + chrome
 	start := 0
 	if len(m.restoreEntries) > maxVisible {
 		start = m.restoreCursor - maxVisible/2

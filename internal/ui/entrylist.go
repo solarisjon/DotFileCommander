@@ -115,7 +115,8 @@ func (m *Model) buildEntryList() {
 	cw := m.contentWidth()
 	delegate := newEntryDelegate()
 
-	l := list.New(items, delegate, cw, 14)
+	lh := m.listHeight(6) // header + status bar + help + chrome
+	l := list.New(items, delegate, cw, lh)
 	l.Title = "📋 Tracked Entries"
 	l.Styles.Title = lipgloss.NewStyle().Bold(true).Foreground(primaryColor).MarginLeft(0)
 	l.SetShowStatusBar(true)

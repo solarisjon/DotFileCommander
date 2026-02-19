@@ -115,8 +115,9 @@ func (m *Model) buildRemoteTable() {
 	s.Cell = s.Cell.Foreground(textColor)
 
 	height := len(rows)
-	if height > 15 {
-		height = 15
+	maxH := m.listHeight(10) // header + detail panel + status + chrome
+	if height > maxH {
+		height = maxH
 	}
 	if height < 3 {
 		height = 3
