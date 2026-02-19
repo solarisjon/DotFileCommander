@@ -69,7 +69,7 @@ func ListConfigDirs() ([]string, error) {
 
 	var dirs []string
 	for _, e := range entries {
-		if e.IsDir() && !strings.HasPrefix(e.Name(), ".") {
+		if e.IsDir() && !strings.HasPrefix(e.Name(), ".") && e.Name() != "dfc" {
 			dirs = append(dirs, e.Name())
 		}
 	}
