@@ -44,6 +44,14 @@ func Run(entries []config.Entry, repoPath string, profile string) <-chan Progres
 			srcPath := filepath.Join(repoPath, relPath)
 			dstPath := expandHome(entry.Path)
 
+			// Check source exists in repo before attempting restore
+			if _, err := os.Stat(srcPath); os.IsNotExist(err) {
+				p.Done = true
+				p.Err = fmt.Errorf("not found in repo (run Backup on source machine first)")
+				ch <- p
+				continue
+			}
+
 			var err error
 			if entry.IsDir {
 				err = copyDir(srcPath, dstPath, &p)

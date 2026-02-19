@@ -2,6 +2,8 @@ package ui
 
 import (
 	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -29,6 +31,7 @@ type restoreEntryItem struct {
 	idx      int // original index in cfg.Entries
 	selected bool
 	conflict restore.ConflictState
+	inRepo   bool // whether entry exists in the repo
 }
 
 func (m *Model) initRestoreView() {
@@ -54,12 +57,20 @@ func (m *Model) buildRestoreEntries() {
 		conflicts = restore.CheckConflicts(filtered, m.restoreManifest, m.cfg.DeviceProfile)
 	}
 
+	repoPath := expandHome(m.cfg.RepoPath)
+
 	m.restoreEntries = make([]restoreEntryItem, len(filtered))
 	for i, e := range filtered {
+		// Check if entry exists in repo
+		relPath := storage.RepoDir(e, m.cfg.DeviceProfile)
+		srcPath := filepath.Join(repoPath, relPath)
+		_, statErr := os.Stat(srcPath)
+
 		item := restoreEntryItem{
 			entry:    e,
 			idx:      i,
-			selected: true,
+			selected: statErr == nil, // only pre-select if exists in repo
+			inRepo:   statErr == nil,
 		}
 		if conflicts != nil {
 			item.conflict = conflicts[i].State
@@ -376,7 +387,10 @@ func (m Model) viewRestoreEntries() string {
 		leftWidth := 3 + 1 + iconWidth + 1 + (maxName + 2)
 
 		verInfo := ""
-		if m.restoreManifest != nil {
+		// Show repo availability
+		if !item.inRepo {
+			verInfo = helpStyle.Render("not in repo")
+		} else if m.restoreManifest != nil {
 			mkey := storage.ManifestKey(item.entry, m.cfg.DeviceProfile)
 			repoVer := m.restoreManifest.GetVersion(mkey)
 			localVer := item.entry.LocalVersion
