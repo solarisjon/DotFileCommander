@@ -73,6 +73,7 @@ func (m Model) updateConfigBrowser(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m.commitBrowserSelection()
 		case "esc", "q":
 			m.currentView = viewEntryList
+			m.buildEntryList()
 			return m, nil
 		}
 	}
@@ -103,7 +104,7 @@ func (m Model) commitBrowserSelection() (tea.Model, tea.Cmd) {
 	}
 
 	m.currentView = viewEntryList
-	m.entryCursor = 0
+	m.buildEntryList()
 	return m, nil
 }
 

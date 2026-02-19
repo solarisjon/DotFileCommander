@@ -47,7 +47,7 @@ func (m Model) updateMainMenu(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, nil
 			case 2: // Manage Entries
 				m.currentView = viewEntryList
-				m.entryCursor = 0
+				m.buildEntryList()
 			case 3: // Remote Status
 				m.currentView = viewRemote
 				return m, m.initRemoteView()

@@ -5,86 +5,117 @@ import (
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/huh"
 	"github.com/solarisjon/dfc/internal/config"
 	"github.com/solarisjon/dfc/internal/entry"
 )
 
+// buildAddForm creates a huh form for adding a new entry.
+// Phase 1 (addStep==0): path only. Phase 2 (addStep==1): name + profile toggle.
+func (m *Model) buildAddForm() tea.Cmd {
+	if m.addStep == 0 {
+		m.addForm = huh.NewForm(
+			huh.NewGroup(
+				huh.NewInput().
+					Key("path").
+					Title("File or directory path").
+					Description("e.g. ~/.config/kitty or ~/.bashrc").
+					Placeholder("~/.config/kitty").
+					Value(&m.addPath),
+			),
+		).WithWidth(m.contentWidth()).
+			WithShowHelp(false).
+			WithShowErrors(true).
+			WithTheme(dfcHuhTheme())
+		return m.addForm.Init()
+	}
+
+	// Phase 2: name + profile-specific
+	m.addForm = huh.NewForm(
+		huh.NewGroup(
+			huh.NewInput().
+				Key("name").
+				Title("Friendly name").
+				Description("Display name for this entry").
+				Value(&m.addName),
+			huh.NewConfirm().
+				Key("profile").
+				Title("Profile-specific?").
+				Description("Store a separate copy per device profile").
+				Affirmative("Yes").
+				Negative("No").
+				Value(&m.addProfileSpecific),
+		),
+	).WithWidth(m.contentWidth()).
+		WithShowHelp(false).
+		WithShowErrors(true).
+		WithTheme(dfcHuhTheme())
+	return m.addForm.Init()
+}
+
 func (m Model) updateAddEntry(msg tea.Msg) (tea.Model, tea.Cmd) {
-	switch msg := msg.(type) {
-	case tea.KeyMsg:
-		switch msg.String() {
-		case "esc":
-			if m.addStep > 0 {
-				m.addStep--
-				return m, nil
-			}
-			m.currentView = viewEntryList
-			return m, nil
+	if m.addForm == nil {
+		return m, nil
+	}
 
-		case "y":
-			if m.addStep == 2 {
-				m.addProfileSpecific = true
-				msg = tea.KeyMsg{Type: tea.KeyEnter}
-				return m.updateAddEntry(msg)
-			}
-		case "n":
-			if m.addStep == 2 {
-				m.addProfileSpecific = false
-				msg = tea.KeyMsg{Type: tea.KeyEnter}
-				return m.updateAddEntry(msg)
-			}
-
-		case "enter":
-			switch m.addStep {
-			case 0: // Path entered
-				path := strings.TrimSpace(m.addInput.Value())
-				if path == "" {
-					m.errMsg = "Path cannot be empty"
-					return m, nil
-				}
-				m.addIsDir = entry.IsDir(path)
-				m.addNameInput.SetValue(entry.FriendlyName(path))
-				m.addStep = 1
-				m.addNameInput.Focus()
-				m.errMsg = ""
-				return m, m.addNameInput.Focus()
-
-			case 1: // Name entered — ask profile-specific
-				m.addProfileSpecific = false
-				m.addStep = 2
-				return m, nil
-
-			case 2: // Profile-specific answered — save
-				path := strings.TrimSpace(m.addInput.Value())
-				name := strings.TrimSpace(m.addNameInput.Value())
-
-				e := config.Entry{
-					Path:            path,
-					Name:            name,
-					IsDir:           m.addIsDir,
-					ProfileSpecific: m.addProfileSpecific,
-				}
-
-				if err := m.cfg.AddEntry(e); err != nil {
-					m.errMsg = fmt.Sprintf("Error: %v", err)
-					return m, nil
-				}
-
-				m.currentView = viewEntryList
-				m.errMsg = ""
-				return m, nil
-			}
+	// Intercept esc before forwarding to huh
+	if key, ok := msg.(tea.KeyMsg); ok && key.String() == "esc" {
+		if m.addStep > 0 {
+			m.addStep = 0
+			m.errMsg = ""
+			cmd := m.buildAddForm()
+			return m, cmd
 		}
+		m.currentView = viewEntryList
+		m.buildEntryList()
+		return m, nil
 	}
 
-	// Forward to active input
-	var cmd tea.Cmd
-	switch m.addStep {
-	case 0:
-		m.addInput, cmd = m.addInput.Update(msg)
-	case 1:
-		m.addNameInput, cmd = m.addNameInput.Update(msg)
+	// Forward to huh form
+	form, cmd := m.addForm.Update(msg)
+	if f, ok := form.(*huh.Form); ok {
+		m.addForm = f
 	}
+
+	if m.addForm.State == huh.StateCompleted {
+		if m.addStep == 0 {
+			// Phase 1 done — validate path and move to phase 2
+			path := strings.TrimSpace(m.addPath)
+			if path == "" {
+				m.errMsg = "Path cannot be empty"
+				cmd := m.buildAddForm()
+				return m, cmd
+			}
+			m.addIsDir = entry.IsDir(path)
+			m.addName = entry.FriendlyName(path)
+			m.addProfileSpecific = false
+			m.addStep = 1
+			initCmd := m.buildAddForm()
+			return m, initCmd
+		}
+
+		// Phase 2 done — save entry
+		path := strings.TrimSpace(m.addPath)
+		name := strings.TrimSpace(m.addName)
+
+		e := config.Entry{
+			Path:            path,
+			Name:            name,
+			IsDir:           m.addIsDir,
+			ProfileSpecific: m.addProfileSpecific,
+		}
+
+		if err := m.cfg.AddEntry(e); err != nil {
+			m.errMsg = fmt.Sprintf("Error: %v", err)
+			return m, nil
+		}
+
+		m.currentView = viewEntryList
+		m.buildEntryList()
+		m.errMsg = ""
+		return m, nil
+	}
+
 	return m, cmd
 }
 
@@ -94,47 +125,23 @@ func (m Model) viewAddEntry() string {
 	b.WriteString(sectionHeader("➕", "Add Entry"))
 	b.WriteString("\n\n")
 
-	steps := []string{"Path", "Friendly Name", "Profile-Specific"}
-	for i, step := range steps {
-		prefix := "  "
-		if i == m.addStep {
-			prefix = "▸ "
-		}
-		if i < m.addStep {
-			prefix = "✓ "
-		}
-		b.WriteString(helpStyle.Render(prefix + step))
-		b.WriteString("\n")
-	}
-	b.WriteString("\n")
-
-	switch m.addStep {
-	case 0:
-		b.WriteString("Enter file or directory path:\n\n")
-		b.WriteString(m.addInput.View())
-	case 1:
-		b.WriteString(fmt.Sprintf("Path: %s\n\n", helpStyle.Render(m.addInput.Value())))
-		b.WriteString("Enter a friendly name:\n\n")
-		b.WriteString(m.addNameInput.View())
-	case 2:
-		b.WriteString(fmt.Sprintf("Path: %s\n", helpStyle.Render(m.addInput.Value())))
-		b.WriteString(fmt.Sprintf("Name: %s\n\n", helpStyle.Render(m.addNameInput.Value())))
-		b.WriteString("Store a separate copy per device profile? (y/n)\n\n")
-		b.WriteString(helpStyle.Render("Profile-specific entries are backed up per device."))
-	}
-
-	b.WriteString("\n\n")
-
-	if m.errMsg != "" {
-		b.WriteString(errorStyle.Render("✗ " + m.errMsg))
+	if m.addStep > 0 {
+		b.WriteString(successStyle.Render("✓ Path: "))
+		b.WriteString(helpStyle.Render(m.addPath))
 		b.WriteString("\n\n")
 	}
 
-	if m.addStep == 2 {
-		b.WriteString(statusBar("y yes • n no • esc back"))
-	} else {
-		b.WriteString(statusBar("enter next • esc back"))
+	if m.addForm != nil {
+		b.WriteString(m.addForm.View())
 	}
+
+	if m.errMsg != "" {
+		b.WriteString("\n")
+		b.WriteString(errorStyle.Render("✗ " + m.errMsg))
+	}
+
+	b.WriteString("\n")
+	b.WriteString(statusBar("esc back"))
 
 	return m.box().Render(b.String())
 }

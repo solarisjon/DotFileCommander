@@ -4,7 +4,9 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/charmbracelet/bubbles/table"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 	"github.com/solarisjon/dfc/internal/entry"
 	"github.com/solarisjon/dfc/internal/hash"
 	"github.com/solarisjon/dfc/internal/manifest"
@@ -22,15 +24,112 @@ func (m Model) updateRemoteView(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.errMsg = msg.err.Error()
 		} else {
 			m.loadRemoteData()
+			m.buildRemoteTable()
 		}
 		return m, nil
 	case tea.KeyMsg:
 		switch msg.String() {
 		case "esc", "q":
 			m.currentView = viewMainMenu
+			return m, nil
 		}
 	}
+	// Forward to the table for scrolling/navigation
+	if m.remoteTable != nil {
+		t, cmd := m.remoteTable.Update(msg)
+		m.remoteTable = &t
+		return m, cmd
+	}
 	return m, nil
+}
+
+func (m *Model) buildRemoteTable() {
+	cw := m.contentWidth()
+
+	// Compute proportional column widths
+	fixedW := 8 + 8 + 22 + 6 // Remote + Local + Status + spacing
+	flexW := cw - fixedW
+	if flexW < 20 {
+		flexW = 20
+	}
+	nameW := flexW * 2 / 5
+	pathW := flexW - nameW
+
+	cols := []table.Column{
+		{Title: "Name", Width: nameW},
+		{Title: "Path", Width: pathW},
+		{Title: "Remote", Width: 8},
+		{Title: "Local", Width: 8},
+		{Title: "Status", Width: 22},
+	}
+
+	rows := make([]table.Row, len(m.remoteEntries))
+	for i, re := range m.remoteEntries {
+		var remoteStr, localStr, status string
+
+		if re.isRemote {
+			remoteStr = fmt.Sprintf("v%d", re.repoVer)
+		} else {
+			remoteStr = "—"
+		}
+
+		if re.isLocal && re.localVer > 0 {
+			localStr = fmt.Sprintf("v%d", re.localVer)
+		} else if re.isLocal {
+			localStr = "v0"
+		} else {
+			localStr = "—"
+		}
+
+		switch {
+		case !re.isLocal && re.isRemote:
+			status = "⚠ not tracked locally"
+		case re.isLocal && !re.isRemote:
+			status = "⊘ never backed up"
+		case re.localModified && re.localVer < re.repoVer:
+			status = "⚡ conflict"
+		case re.localModified:
+			status = "⚠ modified locally"
+		case re.localVer < re.repoVer:
+			status = "⬇ outdated"
+		case re.localVer == re.repoVer && re.repoVer > 0:
+			status = "✓ current"
+		default:
+			status = "—"
+		}
+
+		rows[i] = table.Row{re.name, re.path, remoteStr, localStr, status}
+	}
+
+	s := table.DefaultStyles()
+	s.Header = s.Header.
+		BorderStyle(lipgloss.NormalBorder()).
+		BorderForeground(dimColor).
+		BorderBottom(true).
+		Bold(true).
+		Foreground(secondaryColor)
+	s.Selected = s.Selected.
+		Foreground(brightWhite).
+		Background(lipgloss.Color("#3B0764")).
+		Bold(true)
+	s.Cell = s.Cell.Foreground(textColor)
+
+	height := len(rows)
+	if height > 15 {
+		height = 15
+	}
+	if height < 3 {
+		height = 3
+	}
+
+	t := table.New(
+		table.WithColumns(cols),
+		table.WithRows(rows),
+		table.WithFocused(true),
+		table.WithHeight(height),
+		table.WithStyles(s),
+	)
+	m.remoteTable = &t
 }
 
 type remoteEntry struct {
@@ -163,90 +262,43 @@ func (m Model) viewRemoteView() string {
 		return m.box().Render(b.String())
 	}
 
-	// Compute column widths (capped to fit terminal)
-	cw := m.contentWidth()
-	maxName := 4 // "Name"
-	maxPath := 4 // "Path"
-	for _, re := range m.remoteEntries {
-		if len(re.name) > maxName {
-			maxName = len(re.name)
-		}
-		if len(re.path) > maxPath {
-			maxPath = len(re.path)
-		}
-	}
-	// fixed cols: Remote(8) + Local(8) + Status(~8) + spacing(~12) ≈ 36
-	fixedCols := 36
-	avail := cw - fixedCols
-	if avail < 16 {
-		avail = 16
-	}
-	nameLimit := avail * 2 / 5
-	pathLimit := avail - nameLimit
-	if maxName > nameLimit {
-		maxName = nameLimit
-	}
-	if maxPath > pathLimit {
-		maxPath = pathLimit
-	}
-
-	// Header
-	header := fmt.Sprintf("  %s  %s  %s  %s  %s",
-		padRight("Name", maxName),
-		padRight("Path", maxPath),
-		padRight("Remote", 8),
-		padRight("Local", 8),
-		"Status",
-	)
-	b.WriteString(secondaryStyle.Render(header))
-	b.WriteString("\n")
-	b.WriteString(helpStyle.Render(strings.Repeat("─", len(header))))
-	b.WriteString("\n")
-
-	for _, re := range m.remoteEntries {
-		nameCol := padRight(re.name, maxName)
-		pathCol := helpStyle.Render(padRight(re.path, maxPath))
-
-		var remoteCol, localCol, status string
-
-		if re.isRemote {
-			remoteCol = padRight(fmt.Sprintf("v%d", re.repoVer), 8)
-		} else {
-			remoteCol = helpStyle.Render(padRight("—", 8))
-		}
-
-		if re.isLocal && re.localVer > 0 {
-			localCol = padRight(fmt.Sprintf("v%d", re.localVer), 8)
-		} else if re.isLocal {
-			localCol = helpStyle.Render(padRight("v0", 8))
-		} else {
-			localCol = helpStyle.Render(padRight("—", 8))
-		}
-
-		switch {
-		case !re.isLocal && re.isRemote:
-			status = warningStyle.Render("⚠ not tracked locally")
-		case re.isLocal && !re.isRemote:
-			status = helpStyle.Render("⊘ never backed up")
-		case re.localModified && re.localVer < re.repoVer:
-			status = errorStyle.Render("⚡ conflict (local modified + repo newer)")
-		case re.localModified:
-			status = warningStyle.Render("⚠ modified locally — backup recommended")
-		case re.localVer < re.repoVer:
-			status = warningStyle.Render(fmt.Sprintf("⬇ outdated (from %s)", re.updatedBy))
-		case re.localVer == re.repoVer && re.repoVer > 0:
-			status = successStyle.Render("✓ current")
-		default:
-			status = helpStyle.Render("—")
-		}
-
-		line := fmt.Sprintf("  %s  %s  %s  %s  %s", nameCol, pathCol, remoteCol, localCol, status)
-		b.WriteString(line)
+	if m.remoteTable != nil {
+		b.WriteString(m.remoteTable.View())
 		b.WriteString("\n")
+
+		// Color-coded status legend
+		row := m.remoteTable.SelectedRow()
+		if len(row) > 4 {
+			detail := m.remoteStatusDetail(row)
+			if detail != "" {
+				b.WriteString("\n")
+				b.WriteString(detail)
+			}
+		}
 	}
 
-	b.WriteString("\n")
-	b.WriteString(helpStyle.Render("esc back"))
+	b.WriteString(statusBar("↑/↓ navigate • esc back"))
 
 	return m.box().Render(b.String())
+}
+
+// remoteStatusDetail returns a color-styled detail line for the selected row.
+func (m Model) remoteStatusDetail(row table.Row) string {
+	status := row[4]
+	switch {
+	case strings.Contains(status, "conflict"):
+		return errorStyle.Render("  ⚡ Both local and remote have changed — manual review needed")
+	case strings.Contains(status, "modified"):
+		return warningStyle.Render("  ⚠ Local changes detected — run Backup to push them")
+	case strings.Contains(status, "outdated"):
+		return warningStyle.Render("  ⬇ Remote is newer — run Restore to update")
+	case strings.Contains(status, "not tracked"):
+		return warningStyle.Render("  ⚠ Exists in repo but not in your local config")
+	case strings.Contains(status, "never backed"):
+		return helpStyle.Render("  ⊘ Not yet pushed to remote — run Backup")
+	case strings.Contains(status, "current"):
+		return successStyle.Render("  ✓ Local and remote are in sync")
+	default:
+		return ""
+	}
 }

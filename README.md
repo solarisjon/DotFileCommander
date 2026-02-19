@@ -17,7 +17,10 @@ A TUI application for backing up and restoring your dotfiles across multiple mac
 - **Responsive UI** — Layout dynamically adapts to terminal width (60–120 chars)
 - **Reset & Wipe** — Local reset or full remote repo wipe for clean-slate recovery
 - **GitHub CLI Integration** — Uses `gh` for authentication and repo creation
-- **TUI Interface** — Built with [Charm](https://charm.sh) libraries (bubbletea, bubbles, lipgloss)
+- **TUI Interface** — Built with [Charm](https://charm.sh) libraries (bubbletea, bubbles, lipgloss, huh)
+  - **Fuzzy-filterable entry list** — Type `/` to search entries by name or path
+  - **Scrollable remote status table** — Navigable table view with color-coded sync state
+  - **Interactive forms** — Polished input forms for setup and add-entry flows (huh)
 
 ## Installation
 
@@ -93,6 +96,7 @@ On first launch, DFC walks you through setup:
 | `b` | Browse `~/.config` directories to bulk-add |
 | `d` | Delete selected entry |
 | `p` | Toggle profile-specific on selected entry |
+| `/` | Fuzzy filter entries by name or path |
 | `Esc` | Back to main menu |
 
 #### Browsing ~/.config

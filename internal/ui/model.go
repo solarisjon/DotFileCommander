@@ -1,8 +1,11 @@
 package ui
 
 import (
+	"github.com/charmbracelet/bubbles/list"
+	"github.com/charmbracelet/bubbles/table"
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/huh"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/solarisjon/dfc/internal/backup"
 	"github.com/solarisjon/dfc/internal/config"
@@ -39,21 +42,25 @@ type Model struct {
 
 	// Entry list
 	entryCursor  int
+	entryList    *list.Model
 
-	// Add entry
-	addInput     textinput.Model
-	addStep      int // 0=path, 1=name, 2=profile-specific
-	addNameInput textinput.Model
-	addIsDir     bool
+	// Add entry (huh form)
+	addForm            *huh.Form
+	addPath            string
+	addName            string
+	addStep            int // 0=path phase, 1=name+profile phase
+	addIsDir           bool
+	addProfileSpecific bool
 
 	// Config browser
 	browserDirs   []browserItem
 	browserCursor int
 
 	// Setup
-	setupInput   textinput.Model
 	setupStep    int // setupStep* constants
-	setupMethod  int // 0=existing URL, 1=create via gh
+	setupForm    *huh.Form
+	setupChoice  string // "existing" or "create"
+	setupValue   string // URL or repo name
 	ghStatus     gsync.GhStatus
 
 	// Backup/Restore progress
@@ -78,6 +85,7 @@ type Model struct {
 	// Remote view
 	remoteEntries []remoteEntry
 	remoteSyncing bool
+	remoteTable   *table.Model
 
 	// Reset view
 	resetStep      int
@@ -87,9 +95,6 @@ type Model struct {
 	// Profile edit
 	profileInput   textinput.Model
 	profileReturn  view // view to return to after profile edit
-
-	// Add entry — profile toggle
-	addProfileSpecific bool
 
 	quitting bool
 }
@@ -137,21 +142,6 @@ func (m Model) contentWidth() int {
 
 // New creates a new root model.
 func New(cfg *config.Config) Model {
-	ti := textinput.New()
-	ti.Placeholder = "git@github.com:user/dotfiles.git"
-	ti.CharLimit = 256
-	ti.Width = 60
-
-	addTi := textinput.New()
-	addTi.Placeholder = "~/.config/kitty"
-	addTi.CharLimit = 256
-	addTi.Width = 60
-
-	nameTi := textinput.New()
-	nameTi.Placeholder = "Kitty Terminal"
-	nameTi.CharLimit = 100
-	nameTi.Width = 40
-
 	profileTi := textinput.New()
 	profileTi.Placeholder = "work"
 	profileTi.CharLimit = 50
@@ -178,9 +168,6 @@ func New(cfg *config.Config) Model {
 		cfg:         cfg,
 		currentView: startView,
 		menuItems:   []string{"Backup", "Restore", "Manage Entries", "Remote Status", "Reset", "Device Profile", "Settings"},
-		setupInput:  ti,
-		addInput:    addTi,
-		addNameInput: nameTi,
 		profileInput: profileTi,
 		ghStatus:    ghSt,
 		setupStep:   initialStep,

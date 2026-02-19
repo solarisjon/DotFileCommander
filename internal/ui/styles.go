@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/charmbracelet/huh"
 	"github.com/charmbracelet/lipgloss"
 )
 
@@ -210,4 +211,19 @@ var menuDescriptions = []string{
 	"Reset all tracking data",
 	"Set this machine's identity",
 	"Configure repository settings",
+}
+
+// dfcHuhTheme returns a huh form theme matching DFC's color palette.
+func dfcHuhTheme() *huh.Theme {
+	t := huh.ThemeDracula()
+	t.Focused.Title = t.Focused.Title.Foreground(secondaryColor).Bold(true)
+	t.Focused.Description = t.Focused.Description.Foreground(subtleColor)
+	t.Focused.Base = t.Focused.Base.BorderForeground(accentColor)
+	t.Focused.TextInput.Cursor = t.Focused.TextInput.Cursor.Foreground(secondaryColor)
+	t.Focused.TextInput.Prompt = t.Focused.TextInput.Prompt.Foreground(accentColor)
+	t.Focused.SelectSelector = t.Focused.SelectSelector.Foreground(secondaryColor)
+	t.Focused.SelectedOption = t.Focused.SelectedOption.Foreground(secondaryColor)
+	t.Focused.FocusedButton = t.Focused.FocusedButton.Background(primaryColor).Foreground(brightWhite)
+	t.Focused.BlurredButton = t.Focused.BlurredButton.Background(dimColor).Foreground(textColor)
+	return t
 }
