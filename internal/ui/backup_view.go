@@ -114,6 +114,7 @@ func (m Model) handleBackupProgress(msg backupProgressMsg) (tea.Model, tea.Cmd) 
 		item.err = msg.Err
 		item.contentHash = msg.ContentHash
 		item.skipped = msg.Skipped
+		item.skipReasons = msg.SkipReasons
 		item.warning = msg.Warning
 		if msg.BytesTotal > 0 {
 			item.percent = float64(msg.BytesCopied) / float64(msg.BytesTotal)
@@ -280,6 +281,9 @@ func (m Model) viewBackupProgress() string {
 				b.WriteString("\n      " + warningStyle.Render("⚠ "+item.warning))
 			} else if item.skipped > 0 {
 				b.WriteString(" " + warningStyle.Render(fmt.Sprintf("%d skipped", item.skipped)))
+				for _, reason := range item.skipReasons {
+					b.WriteString("\n      " + helpStyle.Render("  · "+reason))
+				}
 			}
 			b.WriteString("\n")
 		}

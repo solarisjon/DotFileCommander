@@ -125,6 +125,7 @@ func (m Model) handleRestoreProgress(msg restoreProgressMsg) (tea.Model, tea.Cmd
 		item.done = msg.Done
 		item.err = msg.Err
 		item.skipped = msg.Skipped
+		item.skipReasons = msg.SkipReasons
 		if msg.BytesTotal > 0 {
 			item.percent = float64(msg.BytesCopied) / float64(msg.BytesTotal)
 		} else if msg.Done {
@@ -479,6 +480,9 @@ func (m Model) viewRestoreRunning() string {
 				b.WriteString(" " + errorStyle.Render(item.err.Error()))
 			} else if item.skipped > 0 {
 				b.WriteString(" " + warningStyle.Render(fmt.Sprintf("%d skipped", item.skipped)))
+				for _, reason := range item.skipReasons {
+					b.WriteString("\n      " + helpStyle.Render("  · "+reason))
+				}
 			}
 			b.WriteString("\n")
 		}

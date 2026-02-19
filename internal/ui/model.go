@@ -105,6 +105,7 @@ type progressItem struct {
 	percent     float64
 	contentHash string
 	skipped     int
+	skipReasons []string
 	warning     string
 }
 

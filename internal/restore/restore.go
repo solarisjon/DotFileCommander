@@ -21,7 +21,8 @@ type Progress struct {
 	Err         error
 	BytesCopied int64
 	BytesTotal  int64
-	Skipped     int // number of files skipped due to errors
+	Skipped     int      // number of files skipped due to errors
+	SkipReasons []string // why each file was skipped
 }
 
 // Run restores entries from the repo to the filesystem.
@@ -114,7 +115,7 @@ func copyDir(src, dst string, p *Progress) error {
 
 	return filepath.WalkDir(src, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
-			p.Skipped++
+			skipFile(p, path, src, fmt.Sprintf("access error: %v", err))
 			return nil
 		}
 
@@ -125,7 +126,7 @@ func copyDir(src, dst string, p *Progress) error {
 
 		rel, err := filepath.Rel(src, path)
 		if err != nil {
-			p.Skipped++
+			skipFile(p, path, src, fmt.Sprintf("path error: %v", err))
 			return nil
 		}
 		target := filepath.Join(dst, rel)
@@ -134,23 +135,23 @@ func copyDir(src, dst string, p *Progress) error {
 		if d.Type()&fs.ModeSymlink != 0 {
 			linkTarget, err := os.Readlink(path)
 			if err != nil {
-				p.Skipped++
+				skipFile(p, path, src, fmt.Sprintf("symlink read error: %v", err))
 				return nil
 			}
 			if err := os.MkdirAll(filepath.Dir(target), 0755); err != nil {
-				p.Skipped++
+				skipFile(p, path, src, fmt.Sprintf("mkdir error: %v", err))
 				return nil
 			}
 			os.Remove(target)
 			if err := os.Symlink(linkTarget, target); err != nil {
-				p.Skipped++
+				skipFile(p, path, src, fmt.Sprintf("symlink create error: %v", err))
 			}
 			return nil
 		}
 
 		// Skip special files (sockets, pipes, devices)
 		if !d.IsDir() && !d.Type().IsRegular() {
-			p.Skipped++
+			skipFile(p, path, src, "special file (socket/pipe/device)")
 			return nil
 		}
 
@@ -160,25 +161,25 @@ func copyDir(src, dst string, p *Progress) error {
 
 		info, err := d.Info()
 		if err != nil {
-			p.Skipped++
+			skipFile(p, path, src, fmt.Sprintf("stat error: %v", err))
 			return nil
 		}
 
 		if err := os.MkdirAll(filepath.Dir(target), 0755); err != nil {
-			p.Skipped++
+			skipFile(p, path, src, fmt.Sprintf("mkdir error: %v", err))
 			return nil
 		}
 
 		in, err := os.Open(path)
 		if err != nil {
-			p.Skipped++
+			skipFile(p, path, src, fmt.Sprintf("open error: %v", err))
 			return nil
 		}
 		defer in.Close()
 
 		out, err := os.Create(target)
 		if err != nil {
-			p.Skipped++
+			skipFile(p, path, src, fmt.Sprintf("create error: %v", err))
 			return nil
 		}
 		defer out.Close()
@@ -186,12 +187,21 @@ func copyDir(src, dst string, p *Progress) error {
 		n, err := io.Copy(out, in)
 		p.BytesCopied += n
 		if err != nil {
-			p.Skipped++
+			skipFile(p, path, src, fmt.Sprintf("copy error: %v", err))
 			return nil
 		}
 
 		return out.Chmod(info.Mode())
 	})
+}
+
+func skipFile(p *Progress, path, base, reason string) {
+	rel, err := filepath.Rel(base, path)
+	if err != nil {
+		rel = filepath.Base(path)
+	}
+	p.Skipped++
+	p.SkipReasons = append(p.SkipReasons, rel+": "+reason)
 }
 
 func homeRelative(path string) string {
