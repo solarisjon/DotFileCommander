@@ -101,7 +101,7 @@ func copyFile(src, dst string, p *Progress) error {
 }
 
 func copyDir(src, dst string, p *Progress) error {
-	// Count total bytes first (skip .git dirs)
+	// Count total bytes first (skip .git dirs and symlinks)
 	var totalBytes int64
 	_ = filepath.WalkDir(src, func(path string, d fs.DirEntry, err error) error {
 		if err != nil || d.IsDir() {
@@ -109,6 +109,9 @@ func copyDir(src, dst string, p *Progress) error {
 				return filepath.SkipDir
 			}
 			return err
+		}
+		if d.Type()&fs.ModeSymlink != 0 {
+			return nil // skip symlinks for byte counting
 		}
 		info, err := d.Info()
 		if err != nil {
@@ -134,6 +137,20 @@ func copyDir(src, dst string, p *Progress) error {
 			return err
 		}
 		target := filepath.Join(dst, rel)
+
+		// Handle symlinks: recreate them rather than following
+		if d.Type()&fs.ModeSymlink != 0 {
+			linkTarget, err := os.Readlink(path)
+			if err != nil {
+				return err
+			}
+			if err := os.MkdirAll(filepath.Dir(target), 0755); err != nil {
+				return err
+			}
+			// Remove existing symlink/file at target before creating
+			os.Remove(target)
+			return os.Symlink(linkTarget, target)
+		}
 
 		if d.IsDir() {
 			return os.MkdirAll(target, 0755)

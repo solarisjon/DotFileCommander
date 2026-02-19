@@ -99,6 +99,9 @@ func copyDir(src, dst string, p *Progress) error {
 			}
 			return err
 		}
+		if d.Type()&fs.ModeSymlink != 0 {
+			return nil // skip symlinks for byte counting
+		}
 		info, err := d.Info()
 		if err != nil {
 			return nil
@@ -123,6 +126,19 @@ func copyDir(src, dst string, p *Progress) error {
 			return err
 		}
 		target := filepath.Join(dst, rel)
+
+		// Handle symlinks: recreate them rather than following
+		if d.Type()&fs.ModeSymlink != 0 {
+			linkTarget, err := os.Readlink(path)
+			if err != nil {
+				return err
+			}
+			if err := os.MkdirAll(filepath.Dir(target), 0755); err != nil {
+				return err
+			}
+			os.Remove(target)
+			return os.Symlink(linkTarget, target)
+		}
 
 		if d.IsDir() {
 			return os.MkdirAll(target, 0755)

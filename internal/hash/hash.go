@@ -35,12 +35,17 @@ func HashFile(path string) (string, error) {
 func HashDir(path string) (string, error) {
 	// Collect all file paths first, then sort for determinism.
 	var files []string
+	var symlinks []string
 	err := filepath.WalkDir(path, func(p string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err
 		}
 		if d.IsDir() && d.Name() == ".git" {
 			return filepath.SkipDir
+		}
+		if d.Type()&fs.ModeSymlink != 0 {
+			symlinks = append(symlinks, p)
+			return nil
 		}
 		if !d.IsDir() {
 			files = append(files, p)
@@ -52,6 +57,7 @@ func HashDir(path string) (string, error) {
 	}
 
 	sort.Strings(files)
+	sort.Strings(symlinks)
 
 	h := sha256.New()
 	for _, fp := range files {
@@ -71,6 +77,20 @@ func HashDir(path string) (string, error) {
 			return "", err
 		}
 		f.Close()
+	}
+
+	// Include symlinks: hash their relative path + link target
+	for _, sp := range symlinks {
+		rel, err := filepath.Rel(path, sp)
+		if err != nil {
+			return "", err
+		}
+		h.Write([]byte("symlink:" + rel))
+		linkTarget, err := os.Readlink(sp)
+		if err != nil {
+			return "", err
+		}
+		h.Write([]byte(linkTarget))
 	}
 
 	return hex.EncodeToString(h.Sum(nil)), nil
