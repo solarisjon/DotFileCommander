@@ -206,6 +206,7 @@ var spinnerFrames = []string{"⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "�
 var menuDescriptions = []string{
 	"Push dotfiles to your git repo",
 	"Pull dotfiles from your git repo",
+	"Import all entries from repo to this machine",
 	"Add, remove, or tag entries",
 	"View sync status of all entries",
 	"Reset all tracking data",

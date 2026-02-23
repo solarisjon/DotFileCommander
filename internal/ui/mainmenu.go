@@ -45,24 +45,27 @@ func (m Model) updateMainMenu(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 				m.currentView = viewRestore
 				return m, m.initRestoreView()
-			case 2: // Manage Entries
+			case 2: // Import from Repo
+				m.currentView = viewBootstrap
+				return m, m.initBootstrapView()
+			case 3: // Manage Entries
 				m.currentView = viewEntryList
 				m.buildEntryList()
-			case 3: // Remote Status
+			case 4: // Remote Status
 				m.currentView = viewRemote
 				return m, m.initRemoteView()
-			case 4: // Reset
+			case 5: // Reset
 				m.currentView = viewReset
 				m.initResetView()
 				return m, nil
-			case 5: // Device Profile
+			case 6: // Device Profile
 				m.profileInput.SetValue(m.cfg.DeviceProfile)
 				m.profileInput.Focus()
 				m.profileReturn = viewMainMenu
 				m.currentView = viewProfileEdit
 				m.errMsg = ""
 				return m, m.profileInput.Focus()
-			case 6: // Settings
+			case 7: // Settings
 				m.currentView = viewSetup
 				m.setupStep = setupStepGhCheck
 				m.ghStatus = gsync.GhChecking
@@ -126,7 +129,7 @@ func (m Model) viewMainMenu() string {
 	return m.box().Render(b.String())
 }
 
-var menuIcons = []string{"⬆", "⬇", "📋", "🌐", "🔄", "👤", "⚙"}
+var menuIcons = []string{"⬆", "⬇", "📦", "📋", "🌐", "🔄", "👤", "⚙"}
 
 // needsProfile returns true if there are profile-specific entries but no device profile set.
 func (m Model) needsProfile() bool {

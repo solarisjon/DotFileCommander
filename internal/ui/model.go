@@ -23,6 +23,7 @@ const (
 	viewAddEntry
 	viewBackup
 	viewRestore
+	viewBootstrap
 	viewConfigBrowser
 	viewRemote
 	viewReset
@@ -81,6 +82,12 @@ type Model struct {
 	restoreCh        <-chan restore.Progress
 	restoreManifest  *manifest.Manifest
 	restoreConfirmed bool
+
+	// Bootstrap (import from repo)
+	bootstrapStep     int
+	bootstrapCursor   int
+	bootstrapEntries  []bootstrapItem
+	bootstrapCh       <-chan restore.Progress
 
 	// Error display
 	errMsg string
@@ -189,7 +196,7 @@ func New(cfg *config.Config) Model {
 	return Model{
 		cfg:         cfg,
 		currentView: startView,
-		menuItems:   []string{"Backup", "Restore", "Manage Entries", "Remote Status", "Reset", "Device Profile", "Settings"},
+		menuItems:   []string{"Backup", "Restore", "Import from Repo", "Manage Entries", "Remote Status", "Reset", "Device Profile", "Settings"},
 		profileInput: profileTi,
 		ghStatus:    ghSt,
 		setupStep:   initialStep,
@@ -229,8 +236,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.handleRestoreSyncDone(msg)
 	case restorePreSyncDoneMsg:
 		return m.updateRestoreView(msg)
-	case ghCheckDoneMsg:
-		return m.updateSetup(msg)
+	case bootstrapSyncDoneMsg:
+		return m.updateBootstrapView(msg)
+	case bootstrapProgressMsg:
+		return m.updateBootstrapView(msg)
 	case ghAuthDoneMsg:
 		return m.updateSetup(msg)
 	case gitIDCheckMsg:
@@ -260,6 +269,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.updateBackupView(msg)
 	case viewRestore:
 		return m.updateRestoreView(msg)
+	case viewBootstrap:
+		return m.updateBootstrapView(msg)
 	case viewConfigBrowser:
 		return m.updateConfigBrowser(msg)
 	case viewRemote:
@@ -291,6 +302,8 @@ func (m Model) View() string {
 		return m.viewBackupProgress()
 	case viewRestore:
 		return m.viewRestoreProgress()
+	case viewBootstrap:
+		return m.viewBootstrap()
 	case viewConfigBrowser:
 		return m.viewConfigBrowser()
 	case viewRemote:
