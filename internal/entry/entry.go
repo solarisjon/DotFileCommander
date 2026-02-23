@@ -54,7 +54,37 @@ func FriendlyName(path string) string {
 	return strings.Title(name)
 }
 
-// ListConfigDirs returns subdirectories of ~/.config for browsing.
+// ListHomeDotfiles returns dotfiles and dotdirs directly in ~ for browsing.
+// Excludes known system/cache directories that are not useful to sync.
+func ListHomeDotfiles() ([]string, error) {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return nil, err
+	}
+
+	entries, err := os.ReadDir(home)
+	if err != nil {
+		return nil, err
+	}
+
+	skip := map[string]bool{
+		".cache": true, ".config": true, ".git": true, ".DS_Store": true,
+		".Trash": true, ".npm": true, ".nvm": true, ".local": true,
+		".mozilla": true, ".dbus": true, ".pyenv": true, ".rbenv": true,
+	}
+
+	var files []string
+	for _, e := range entries {
+		if !strings.HasPrefix(e.Name(), ".") {
+			continue
+		}
+		if skip[e.Name()] {
+			continue
+		}
+		files = append(files, e.Name())
+	}
+	return files, nil
+}
 func ListConfigDirs() ([]string, error) {
 	home, err := os.UserHomeDir()
 	if err != nil {

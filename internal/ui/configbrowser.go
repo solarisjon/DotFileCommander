@@ -11,35 +11,57 @@ import (
 )
 
 type browserItem struct {
-	name     string // directory name under ~/.config
+	path     string // full path, e.g. "~/.config/kitty" or "~/.zshrc"
+	name     string // display name (base dir/file name)
 	friendly string // human-readable name
 	selected bool
 	tracked  bool // already in config entries
+	isDir    bool
+	isHeader bool // non-selectable section separator
 }
 
 func (m *Model) initBrowserDirs() {
-	dirs, err := entry.ListConfigDirs()
-	if err != nil {
-		m.errMsg = fmt.Sprintf("Cannot read ~/.config: %v", err)
-		return
-	}
-
-	// Build a set of already-tracked paths for fast lookup
 	tracked := make(map[string]bool)
 	for _, e := range m.cfg.Entries {
 		tracked[e.Path] = true
 	}
 
-	m.browserDirs = make([]browserItem, 0, len(dirs))
-	for _, d := range dirs {
-		path := filepath.Join("~/.config", d)
-		friendly := entry.FriendlyName(path)
-		m.browserDirs = append(m.browserDirs, browserItem{
-			name:     d,
-			friendly: friendly,
-			selected: false,
-			tracked:  tracked[path],
-		})
+	m.browserDirs = nil
+
+	// Section 1: ~/.config subdirectories
+	configDirs, err := entry.ListConfigDirs()
+	if err != nil {
+		m.errMsg = fmt.Sprintf("Cannot read ~/.config: %v", err)
+	} else if len(configDirs) > 0 {
+		m.browserDirs = append(m.browserDirs, browserItem{isHeader: true, friendly: "~/.config"})
+		for _, d := range configDirs {
+			path := filepath.Join("~/.config", d)
+			m.browserDirs = append(m.browserDirs, browserItem{
+				path:    path,
+				name:    d,
+				friendly: entry.FriendlyName(path),
+				tracked: tracked[path],
+				isDir:   true,
+			})
+		}
+	}
+
+	// Section 2: dotfiles/dotdirs directly in ~
+	homeDots, err2 := entry.ListHomeDotfiles()
+	if err2 != nil {
+		m.errMsg = fmt.Sprintf("Cannot read ~: %v", err2)
+	} else if len(homeDots) > 0 {
+		m.browserDirs = append(m.browserDirs, browserItem{isHeader: true, friendly: "~  (dotfiles)"})
+		for _, d := range homeDots {
+			path := filepath.Join("~", d)
+			m.browserDirs = append(m.browserDirs, browserItem{
+				path:    path,
+				name:    d,
+				friendly: entry.FriendlyName(path),
+				tracked: tracked[path],
+				isDir:   entry.IsDir(path),
+			})
+		}
 	}
 }
 
@@ -48,26 +70,34 @@ func (m Model) updateConfigBrowser(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.KeyMsg:
 		switch msg.String() {
 		case "up", "k":
-			if m.browserCursor > 0 {
+			for m.browserCursor > 0 {
 				m.browserCursor--
+				if !m.browserDirs[m.browserCursor].isHeader {
+					break
+				}
 			}
 		case "down", "j":
-			if m.browserCursor < len(m.browserDirs)-1 {
+			for m.browserCursor < len(m.browserDirs)-1 {
 				m.browserCursor++
+				if !m.browserDirs[m.browserCursor].isHeader {
+					break
+				}
 			}
 		case " ":
-			if m.browserCursor < len(m.browserDirs) && !m.browserDirs[m.browserCursor].tracked {
+			if m.browserCursor < len(m.browserDirs) && !m.browserDirs[m.browserCursor].tracked && !m.browserDirs[m.browserCursor].isHeader {
 				m.browserDirs[m.browserCursor].selected = !m.browserDirs[m.browserCursor].selected
 			}
 		case "a":
 			for i := range m.browserDirs {
-				if !m.browserDirs[i].tracked {
+				if !m.browserDirs[i].tracked && !m.browserDirs[i].isHeader {
 					m.browserDirs[i].selected = true
 				}
 			}
 		case "n":
 			for i := range m.browserDirs {
-				m.browserDirs[i].selected = false
+				if !m.browserDirs[i].isHeader {
+					m.browserDirs[i].selected = false
+				}
 			}
 		case "enter":
 			return m.commitBrowserSelection()
@@ -83,14 +113,13 @@ func (m Model) updateConfigBrowser(msg tea.Msg) (tea.Model, tea.Cmd) {
 func (m Model) commitBrowserSelection() (tea.Model, tea.Cmd) {
 	added := 0
 	for _, item := range m.browserDirs {
-		if !item.selected || item.tracked {
+		if item.isHeader || !item.selected || item.tracked {
 			continue
 		}
-		path := filepath.Join("~/.config", item.name)
 		e := config.Entry{
-			Path:  path,
+			Path:  item.path,
 			Name:  item.friendly,
-			IsDir: true,
+			IsDir: item.isDir,
 		}
 		if err := m.cfg.AddEntry(e); err != nil {
 			m.errMsg = fmt.Sprintf("Failed to add %s: %v", item.name, err)
@@ -118,29 +147,33 @@ func pluralize2(n int) string {
 func (m Model) viewConfigBrowser() string {
 	var b strings.Builder
 
-	b.WriteString(sectionHeader("📂", "Browse ~/.config"))
+	b.WriteString(sectionHeader("📂", "Browse Dotfiles"))
 	b.WriteString("\n\n")
 
 	if len(m.browserDirs) == 0 {
-		b.WriteString(helpStyle.Render("No directories found in ~/.config"))
+		b.WriteString(helpStyle.Render("No dotfiles found"))
 		b.WriteString("\n\n")
 		b.WriteString(statusBar("esc back"))
 		return m.box().Render(b.String())
 	}
 
-	// Count selected
+	// Count selected (non-header items only)
 	selCount := 0
+	selectableCount := 0
 	for _, item := range m.browserDirs {
+		if item.isHeader {
+			continue
+		}
+		selectableCount++
 		if item.selected {
 			selCount++
 		}
 	}
 
 	// Calculate visible window for scrolling
-	maxVisible := m.listHeight(10) // header + selected count + help + chrome
+	maxVisible := m.listHeight(10)
 	start := 0
 	if len(m.browserDirs) > maxVisible {
-		// Center cursor in window
 		start = m.browserCursor - maxVisible/2
 		if start < 0 {
 			start = 0
@@ -159,40 +192,54 @@ func (m Model) viewConfigBrowser() string {
 		b.WriteString("\n")
 	}
 
-	// Compute column widths for visible items
+	// Compute column widths
 	maxFriendly := 0
-	maxDirName := 0
+	maxName := 0
 	for _, item := range m.browserDirs {
+		if item.isHeader {
+			continue
+		}
 		if len(item.friendly) > maxFriendly {
 			maxFriendly = len(item.friendly)
 		}
-		if item.friendly != item.name && len(item.name) > maxDirName {
-			maxDirName = len(item.name)
+		if item.friendly != item.name && len(item.name) > maxName {
+			maxName = len(item.name)
 		}
 	}
-	// Cap to fit terminal
 	cw := m.contentWidth()
-	avail := cw - 20 // checkbox + icon + spacing + status
+	avail := cw - 20
 	if avail < 16 {
 		avail = 16
 	}
 	friendlyLimit := avail * 3 / 5
-	dirLimit := avail - friendlyLimit
+	nameLimit := avail - friendlyLimit
 	if maxFriendly > friendlyLimit {
 		maxFriendly = friendlyLimit
 	}
-	if maxDirName > dirLimit {
-		maxDirName = dirLimit
+	if maxName > nameLimit {
+		maxName = nameLimit
 	}
 
 	for i := start; i < end; i++ {
 		item := m.browserDirs[i]
+
+		if item.isHeader {
+			b.WriteString("\n")
+			b.WriteString(dimStyle.Render("  ── " + item.friendly + " ──"))
+			b.WriteString("\n")
+			continue
+		}
+
+		icon := "📄"
+		if item.isDir {
+			icon = "📁"
+		}
 		checkbox := "[ ]"
 		nameStyle := normalStyle
 
 		if item.tracked {
 			checkbox = successStyle.Render("[✓]")
-			nameStyle = helpStyle // dim already-tracked items
+			nameStyle = helpStyle
 		} else if item.selected {
 			checkbox = selectedStyle.Render("[✓]")
 		}
@@ -200,9 +247,9 @@ func (m Model) viewConfigBrowser() string {
 		nameCol := padRight(item.friendly, maxFriendly+2)
 		dirCol := ""
 		if item.friendly != item.name {
-			dirCol = helpStyle.Render(padRight("("+item.name+")", maxDirName+4))
-		} else if maxDirName > 0 {
-			dirCol = padRight("", maxDirName+4)
+			dirCol = helpStyle.Render(padRight("("+item.name+")", maxName+4))
+		} else if maxName > 0 {
+			dirCol = padRight("", maxName+4)
 		}
 
 		status := ""
@@ -210,7 +257,7 @@ func (m Model) viewConfigBrowser() string {
 			status = helpStyle.Render("already tracked")
 		}
 
-		line := fmt.Sprintf("%s 📁 %s %s %s", checkbox, nameStyle.Render(nameCol), dirCol, status)
+		line := fmt.Sprintf("%s %s %s %s %s", checkbox, icon, nameStyle.Render(nameCol), dirCol, status)
 
 		if i == m.browserCursor {
 			b.WriteString(selectedStyle.Render("▸ ") + line)
@@ -226,7 +273,7 @@ func (m Model) viewConfigBrowser() string {
 	}
 
 	b.WriteString("\n")
-	b.WriteString(helpStyle.Render(fmt.Sprintf("%d/%d selected", selCount, len(m.browserDirs))))
+	b.WriteString(helpStyle.Render(fmt.Sprintf("%d/%d selected", selCount, selectableCount)))
 	b.WriteString("\n\n")
 	b.WriteString(helpStyle.Render("space toggle • a all • n none • enter add • esc cancel"))
 
