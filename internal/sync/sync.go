@@ -228,6 +228,14 @@ func pull(dir string) error {
 	if err != nil {
 		return nil // no upstream tracking branch
 	}
+	// Discard any uncommitted manifest changes before pulling.
+	// The manifest is regenerated on the next backup/restore, so this is safe.
+	// Using stash/pop risks YAML merge conflict markers which break parsing.
+	statusOut, _ := gitOutput(dir, "status", "--porcelain", ".dfc-manifest.yaml")
+	if strings.TrimSpace(statusOut) != "" {
+		_ = gitCmd(dir, "checkout", "HEAD", "--", ".dfc-manifest.yaml")
+	}
+
 	return gitCmd(dir, "pull", "--ff-only")
 }
 

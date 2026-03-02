@@ -153,11 +153,11 @@ func (m Model) handleBackupProgress(msg backupProgressMsg) (tea.Model, tea.Cmd) 
 				}
 			}
 		}
-		_ = mf.Save(m.cfg.RepoPath)
 		_ = m.cfg.Save()
 
 		// Commit and push (only if something actually changed)
 		if changed > 0 {
+			_ = mf.Save(m.cfg.RepoPath)
 			if err := gsync.CommitAndPush(m.cfg.RepoPath, "dfc: backup dotfiles"); err != nil {
 				m.errMsg = fmt.Sprintf("Push failed: %v", err)
 			} else {

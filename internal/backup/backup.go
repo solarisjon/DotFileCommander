@@ -49,8 +49,17 @@ func Run(entries []config.Entry, repoPath string, profile string) <-chan Progres
 			relPath := storage.RepoDir(entry, profile)
 			destPath := filepath.Join(repoPath, relPath)
 
+			// Auto-detect the actual type on disk in case the config entry is wrong
+			// (e.g. a path that used to be a file is now a directory).
+			isDir := entry.IsDir
+			if !isDir {
+				if info, statErr := os.Stat(srcPath); statErr == nil && info.IsDir() {
+					isDir = true
+				}
+			}
+
 			var err error
-			if entry.IsDir {
+			if isDir {
 				err = copyDir(srcPath, destPath, &p)
 			} else {
 				err = copyFile(srcPath, destPath, &p)
@@ -60,7 +69,7 @@ func Run(entries []config.Entry, repoPath string, profile string) <-chan Progres
 			p.Err = err
 			if err == nil {
 				// Generate warnings for entries with nothing useful to back up
-				if entry.IsDir && p.Copied == 0 && p.Skipped > 0 {
+				if isDir && p.Copied == 0 && p.Skipped > 0 {
 					p.Warning = describeSkippedDir(srcPath)
 				}
 				// Compute hash of the source for state tracking
