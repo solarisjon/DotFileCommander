@@ -49,12 +49,29 @@ func Run(entries []config.Entry, repoPath string, profile string) <-chan Progres
 			relPath := storage.RepoDir(entry, profile)
 			destPath := filepath.Join(repoPath, relPath)
 
+			// Skip entries whose source path doesn't exist on this machine.
+			if _, statErr := os.Stat(srcPath); os.IsNotExist(statErr) {
+				p.Done = true
+				p.Warning = "source path not found — skipping"
+				ch <- p
+				continue
+			}
+
 			// Auto-detect the actual type on disk in case the config entry is wrong
 			// (e.g. a path that used to be a file is now a directory).
 			isDir := entry.IsDir
 			if !isDir {
 				if info, statErr := os.Stat(srcPath); statErr == nil && info.IsDir() {
 					isDir = true
+				}
+			}
+
+			// If we're about to copy a directory but the destination exists as a
+			// file (left over from a previous backup when the entry was a file),
+			// remove the stale file so MkdirAll can create the directory.
+			if isDir {
+				if dstInfo, dstErr := os.Stat(destPath); dstErr == nil && !dstInfo.IsDir() {
+					os.Remove(destPath)
 				}
 			}
 
