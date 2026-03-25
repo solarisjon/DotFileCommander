@@ -50,11 +50,23 @@ func Run(entries []config.Entry, repoPath string, profile string) <-chan Progres
 			destPath := filepath.Join(repoPath, relPath)
 
 			// Skip entries whose source path doesn't exist on this machine.
+			// For directory entries, create the directory first so it exists
+			// on disk and can be tracked going forward.
 			if _, statErr := os.Stat(srcPath); os.IsNotExist(statErr) {
-				p.Done = true
-				p.Warning = "source path not found — skipping"
-				ch <- p
-				continue
+				if entry.IsDir {
+					if mkErr := os.MkdirAll(srcPath, 0755); mkErr != nil {
+						p.Done = true
+						p.Warning = "source path not found — skipping"
+						ch <- p
+						continue
+					}
+					// Fall through — directory now exists, back it up
+				} else {
+					p.Done = true
+					p.Warning = "source path not found — skipping"
+					ch <- p
+					continue
+				}
 			}
 
 			// Auto-detect the actual type on disk in case the config entry is wrong

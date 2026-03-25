@@ -44,8 +44,20 @@ func Run(entries []config.Entry, repoPath string, profile string) <-chan Progres
 			srcPath := filepath.Join(repoPath, relPath)
 			dstPath := expandHome(entry.Path)
 
-			// Check source exists in repo before attempting restore
+			// Check source exists in repo before attempting restore.
+			// For directory entries not yet in the repo, create the destination
+			// directory on disk so the path exists ready for future use.
 			if _, err := os.Stat(srcPath); os.IsNotExist(err) {
+				if entry.IsDir {
+					if mkErr := os.MkdirAll(dstPath, 0755); mkErr != nil {
+						p.Done = true
+						p.Err = fmt.Errorf("not found in repo and could not create directory: %w", mkErr)
+					} else {
+						p.Done = true
+					}
+					ch <- p
+					continue
+				}
 				p.Done = true
 				p.Err = fmt.Errorf("not found in repo (run Backup on source machine first)")
 				ch <- p

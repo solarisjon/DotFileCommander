@@ -42,8 +42,9 @@ type Model struct {
 	menuCursor   int
 
 	// Entry list
-	entryCursor  int
-	entryList    *list.Model
+	entryCursor        int
+	entryList          *list.Model
+	deleteConfirmEntry *entryItem // entry pending deletion (nil = not confirming)
 
 	// Add entry (huh form)
 	addForm            *huh.Form

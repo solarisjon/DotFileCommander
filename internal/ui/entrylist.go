@@ -163,6 +163,19 @@ func (m *Model) buildEntryList() {
 func (m Model) updateEntryList(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
+		// If a delete confirmation is pending, handle y/n before anything else
+		if m.deleteConfirmEntry != nil {
+			switch msg.String() {
+			case "y", "Y":
+				_ = m.cfg.RemoveEntry(m.deleteConfirmEntry.index)
+				m.deleteConfirmEntry = nil
+				m.buildEntryList()
+			case "n", "N", "esc":
+				m.deleteConfirmEntry = nil
+			}
+			return m, nil
+		}
+
 		// Don't intercept keys when filtering
 		if m.entryList != nil && m.entryList.FilterState() == list.Filtering {
 			break
@@ -180,8 +193,8 @@ func (m Model) updateEntryList(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "d", "delete", "backspace":
 			if m.entryList != nil {
 				if sel, ok := m.entryList.SelectedItem().(entryItem); ok {
-					_ = m.cfg.RemoveEntry(sel.index)
-					m.buildEntryList()
+					copy := sel
+					m.deleteConfirmEntry = &copy
 				}
 			}
 			return m, nil
@@ -222,6 +235,19 @@ func (m Model) updateEntryList(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 func (m Model) viewEntryList() string {
 	var b strings.Builder
+
+	if m.deleteConfirmEntry != nil {
+		b.WriteString(warningStyle.Render("  Delete entry?"))
+		b.WriteString("\n\n")
+		b.WriteString(normalStyle.Render("  Name:  " + m.deleteConfirmEntry.name))
+		b.WriteString("\n")
+		b.WriteString(normalStyle.Render("  Path:  " + m.deleteConfirmEntry.path))
+		b.WriteString("\n\n")
+		b.WriteString(dimStyle.Render("  This removes the entry from dfc. Your actual dotfiles are not touched."))
+		b.WriteString("\n")
+		b.WriteString(statusBar("y confirm • n/esc cancel"))
+		return m.box().Render(b.String())
+	}
 
 	if m.entryList == nil || len(m.cfg.Entries) == 0 {
 		b.WriteString(sectionHeader("📋", "Tracked Entries"))
