@@ -1,12 +1,19 @@
 package sync
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"time"
 )
+
+// networkTimeout is applied to git operations that require network access
+// (clone, pull, push). It prevents the TUI from hanging indefinitely when
+// the remote is unreachable or the connection stalls.
+const networkTimeout = 10 * time.Minute
 
 // GhStatus describes the state of the GitHub CLI.
 type GhStatus int
@@ -116,7 +123,9 @@ func CommitAndPush(localPath, message string) error {
 	if err := gitCmd(localPath, "commit", "-m", message); err != nil {
 		return fmt.Errorf("git commit: %w", err)
 	}
-	if err := gitCmd(localPath, "push"); err != nil {
+	ctx, cancel := context.WithTimeout(context.Background(), networkTimeout)
+	defer cancel()
+	if err := gitCmdCtx(ctx, localPath, "push"); err != nil {
 		return fmt.Errorf("git push: %w", err)
 	}
 	return nil
@@ -180,18 +189,25 @@ func AddRemoteAndPush(localPath, url string) error {
 	if err := gitCmd(localPath, "remote", "add", "origin", url); err != nil {
 		return fmt.Errorf("adding remote: %w", err)
 	}
-	if err := gitCmd(localPath, "push", "-u", "origin", "main"); err != nil {
+	ctx, cancel := context.WithTimeout(context.Background(), networkTimeout)
+	defer cancel()
+	if err := gitCmdCtx(ctx, localPath, "push", "-u", "origin", "main"); err != nil {
 		return fmt.Errorf("initial push: %w", err)
 	}
 	return nil
 }
 
 func clone(url, dest string) error {
-	cmd := exec.Command("git", "clone", url, dest)
+	ctx, cancel := context.WithTimeout(context.Background(), networkTimeout)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, "git", "clone", url, dest)
 	// Use a known-good CWD so clone works even if the process CWD was deleted
 	cmd.Dir = os.TempDir()
 	out, err := cmd.CombinedOutput()
 	if err != nil {
+		if ctx.Err() != nil {
+			return fmt.Errorf("git clone: timed out after %s", networkTimeout)
+		}
 		return fmt.Errorf("git clone: %s: %w", string(out), err)
 	}
 	// If the repo is empty, create an initial commit
@@ -236,7 +252,9 @@ func pull(dir string) error {
 		_ = gitCmd(dir, "checkout", "HEAD", "--", ".dfc-manifest.yaml")
 	}
 
-	return gitCmd(dir, "pull", "--ff-only")
+	ctx, cancel := context.WithTimeout(context.Background(), networkTimeout)
+	defer cancel()
+	return gitCmdCtx(ctx, dir, "pull", "--ff-only")
 }
 
 func gitCmd(dir string, args ...string) error {
@@ -246,6 +264,23 @@ func gitCmd(dir string, args ...string) error {
 	}
 	out, err := cmd.CombinedOutput()
 	if err != nil {
+		return fmt.Errorf("git %s: %s: %w", args[0], string(out), err)
+	}
+	return nil
+}
+
+// gitCmdCtx runs a git command with a context, used for network operations
+// that can hang when the remote is unreachable.
+func gitCmdCtx(ctx context.Context, dir string, args ...string) error {
+	cmd := exec.CommandContext(ctx, "git", args...)
+	if dir != "" {
+		cmd.Dir = dir
+	}
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		if ctx.Err() != nil {
+			return fmt.Errorf("git %s: timed out after %s", args[0], networkTimeout)
+		}
 		return fmt.Errorf("git %s: %s: %w", args[0], string(out), err)
 	}
 	return nil
