@@ -5,8 +5,13 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strings"
 )
+
+// validRepoName matches GitHub repository name rules: alphanumeric, hyphens,
+// underscores, and dots, optionally prefixed with an owner and slash.
+var validRepoName = regexp.MustCompile(`^([a-zA-Z0-9._-]+/)?[a-zA-Z0-9._-]+$`)
 
 // GhStatus describes the state of the GitHub CLI.
 type GhStatus int
@@ -125,6 +130,9 @@ func CommitAndPush(localPath, message string) error {
 // CreateGitHubRepo creates a new private GitHub repo via the gh CLI
 // and returns the HTTPS clone URL.
 func CreateGitHubRepo(name string) (string, error) {
+	if !validRepoName.MatchString(name) {
+		return "", fmt.Errorf("invalid repository name %q: must contain only letters, numbers, hyphens, underscores, and dots", name)
+	}
 	cmd := exec.Command(getGhBin(), "repo", "create", name, "--private", "--clone=false")
 	out, err := cmd.CombinedOutput()
 	if err != nil {
