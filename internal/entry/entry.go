@@ -4,6 +4,9 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"golang.org/x/text/cases"
+	"golang.org/x/text/language"
 )
 
 // KnownApps maps common .config directory names to friendly descriptions.
@@ -46,12 +49,12 @@ func FriendlyName(path string) string {
 			return name
 		}
 		// Capitalize the directory name
-		return strings.Title(base)
+		return cases.Title(language.Und).String(base)
 	}
 
 	// Standalone dotfiles — strip leading dot
 	name := strings.TrimPrefix(base, ".")
-	return strings.Title(name)
+	return cases.Title(language.Und).String(name)
 }
 
 // ListHomeDotfiles returns dotfiles and dotdirs directly in ~ for browsing.
